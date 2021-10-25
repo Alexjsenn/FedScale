@@ -13,7 +13,7 @@ def init_logging():
     logging.basicConfig(
                     format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
                     datefmt='(%m-%d) %H:%M:%S',
-                    level=logging.INFO,
+                    level=logging.DEBUG,
                     handlers=[
                         logging.FileHandler(logFile, mode='a'),
                         logging.StreamHandler()
