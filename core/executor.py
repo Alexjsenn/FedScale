@@ -140,7 +140,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         port = '[::]:{}'.format(50000 + self.this_rank)
         self.grpc_server.add_insecure_port(port)
         self.grpc_server.start()
-        logging.info('Started GRPC server at {port}')
+        logging.info(f'Started GRPC server at {port}')
 
         BaseManager.register('get_server_event_que'+str(self.this_rank))
         BaseManager.register('get_client_event')
