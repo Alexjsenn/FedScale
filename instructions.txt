@@ -1,0 +1,15 @@
+1. clone repo
+2. run "sh install.sh"
+3. add to end of ~/.bashrc  "conda activate fedscale"
+4. close shell, re open, should see (fedscale) ubuntu@... as prompt
+5. run "sh install2.sh"
+
+
+if using as aggregator:
+6. copy from client1 the ssh key (from client machine run 
+    "scp /home/savitb/sennalex/.ssh/id_rsa ubuntu@10.30.74.6:/home/ubuntu/.ssh/")
+
+
+
+if using as worker:
+6. go to datasets, download appropriate datasets
