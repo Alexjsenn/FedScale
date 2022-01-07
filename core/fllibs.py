@@ -162,6 +162,9 @@ def init_model():
         elif args.model == 'svm':
             from utils.models import LinearSVM
             model = LinearSVM(args.input_dim, outputClass[args.data_set])
+        elif args.model == "customFemnist":
+            from utils.models import CustomFemnistCNN
+            model = CustomFemnistCNN()
         else:
             model = tormodels.__dict__[args.model](num_classes=outputClass[args.data_set])
 
