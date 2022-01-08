@@ -8,7 +8,7 @@ from torchvision import transforms
 def get_data_transform(data: str):
     if data == 'mnist':
         train_transform = transforms.Compose([
-            #transforms.Grayscale(num_output_channels=1),
+        transforms.Grayscale(num_output_channels=1),
         transforms.Resize((28,28)), 
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -16,7 +16,7 @@ def get_data_transform(data: str):
         ])
 
         test_transform = transforms.Compose([
-        #transforms.Grayscale(num_output_channels=1),
+        transforms.Grayscale(num_output_channels=1),
             transforms.Resize((28,28)), 
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
