@@ -200,6 +200,8 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         self.setup_env()
         self.model = self.init_model()
         self.model = self.model.to(device=self.device)
+        with open(self.temp_model_path, 'wb') as model_out:
+            pickle.dump(self.model, model_out)
         self.training_sets, self.testing_sets = self.init_data()
         self.setup_communication()
         self.event_monitor()
