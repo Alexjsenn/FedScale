@@ -125,6 +125,26 @@ def get_data_transform(data: str):
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
             # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         ])
+###MDMA
+    elif data == 'cifar100':
+        train_transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),   # input arguments: length&width of a figure
+            #transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),  # convert PIL image or numpy.ndarray to tensor
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+#   transforms.Compose([transforms.RandomHorizontalFlip(),
+#                       transforms.RandomCrop(32, padding=4, padding_mode='reflect'),
+#                       transforms.Normalize((129.30428, 124.07023, 112.43411),(68.17024, 65.391785, 70.4184))])
+        test_transform = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.ToTensor(),
+            #transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ])
+###
     elif data == 'inaturalist':
         train_transform = transforms.Compose([
             #transforms.RandomResizedCrop(64),
