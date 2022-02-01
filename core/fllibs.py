@@ -73,7 +73,7 @@ os.environ['MASTER_ADDR'] = args.ps_ip
 os.environ['MASTER_PORT'] = args.ps_port
 
 
-outputClass = {'Mnist': 10, 'cifar10': 10, "imagenet": 1000, 'emnist': 47,'amazon':5,
+outputClass = {'Mnist': 10, 'cifar10': 10, 'cifar100': 100, "imagenet": 1000, 'emnist': 47,'amazon':5,
                 'openImg': 596, 'google_speech': 35, 'femnist': 62, 'yelp': 5, 'inaturalist' : 1010
             }
 
@@ -207,6 +207,13 @@ def init_dataset():
                                             transform=train_transform)
             test_dataset = datasets.CIFAR10(args.data_dir, train=False, download=True,
                                             transform=test_transform)
+        ###MDMA
+        elif args.data_set == 'cifar100':
+            from utils.cifar100 import cifar100
+            train_transform, test_transform = get_data_transform('cifar100')
+            train_dataset = cifar100(args.data_dir, dataset='train', transform=train_transform)
+            test_dataset = cifar100(args.data_dir, dataset='test', transform=test_transform)
+        ###
 
         elif args.data_set == "imagenet":
             train_transform, test_transform = get_data_transform('imagenet')

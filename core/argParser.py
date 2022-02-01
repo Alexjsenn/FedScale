@@ -177,7 +177,7 @@ args = parser.parse_args()
 
 
 
-datasetCategories = {'Mnist': 10, 'cifar10': 10, "imagenet": 1000, 'emnist': 47,
+datasetCategories = {'Mnist': 10, 'cifar10': 10, 'cifar100': 100, "imagenet": 1000, 'emnist': 47,
                     'openImg': 596, 'google_speech': 35, 'femnist': 62, 'yelp': 5
                     }
 
