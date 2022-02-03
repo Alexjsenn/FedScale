@@ -439,7 +439,6 @@ class Aggregator(object):
             try:
                 self.executors.open_grpc_connection()
                 for executorId in self.executors:
-                    logging.info("In for loop: " + executorId)
                     response = self.executors.get_stub(executorId).ReportExecutorInfo(
                         job_api_pb2.ReportExecutorInfoRequest())
                     self.executor_info_handler(executorId, {"size": response.training_set_size})
