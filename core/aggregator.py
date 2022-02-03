@@ -441,15 +441,16 @@ class Aggregator(object):
             try:
                 self.executors.open_grpc_connection()
                 for executorId in self.executors:
-                    logging.info("In for loop: " + executorId)
+                    logging.info(f"In for loop: {executorId}")
                     response = self.executors.get_stub(executorId).ReportExecutorInfo(
                         job_api_pb2.ReportExecutorInfoRequest())
                     self.executor_info_handler(executorId, {"size": response.training_set_size})
                 break
                 
-            except:
+            except Exception as e:
                 self.executors.close_grpc_connection()
                 logging.info("In exception")
+                logging.info(e)
                 time.sleep(15)
 
         while True:
