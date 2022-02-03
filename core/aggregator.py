@@ -434,11 +434,14 @@ class Aggregator(object):
         logging.info("Start monitoring events ...")
         start_time = time.time()
         time.sleep(20)
+        logging.info("Sleep timer complete")
 
         while time.time() - start_time < 120:
+            logging.info("In timer loop")
             try:
                 self.executors.open_grpc_connection()
                 for executorId in self.executors:
+                    logging.info("In for loop: " + executorId)
                     response = self.executors.get_stub(executorId).ReportExecutorInfo(
                         job_api_pb2.ReportExecutorInfoRequest())
                     self.executor_info_handler(executorId, {"size": response.training_set_size})
@@ -446,6 +449,7 @@ class Aggregator(object):
                 
             except:
                 self.executors.close_grpc_connection()
+                logging.info("In exception")
                 time.sleep(15)
 
         while True:
