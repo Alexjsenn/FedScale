@@ -50,7 +50,7 @@ ssh -i ~/.ssh/id_rsa_client1 -oStrictHostKeyChecking=no -p$PORT \
                     echo $SSH_KEY | tee -a ~/.ssh/authorized_keys > /dev/null'"
 
 green "\nAdding hosts to /etc/hosts"
-echo -e $HOSTS | ssh -oStrictHostKeyChecking=no -p$PORT ubuntu@$IP "sudo bash -c 'cat | sudo tee /etc/hosts > /dev/null'"
+echo -e $HOSTS | ssh -oStrictHostKeyChecking=no -p$PORT ubuntu@$IP "sudo bash -c 'cat | tee /etc/hosts > /dev/null'"
 
 green "\nRuuning batch commands and install conda"
 scp -P$PORT -oStrictHostKeyChecking=no ntp.patch ubuntu@$IP:/tmp
@@ -68,12 +68,16 @@ ssh -oStrictHostKeyChecking=no -p$PORT \
                 chmod +x ./install2.sh && ./install2.sh && \
                 chown -Rf ubuntu:ubuntu /home/ubuntu/*
                 '"
+                
 
 ssh -oStrictHostKeyChecking=no -p$PORT \
         ubuntu@$IP "sudo bash -c 'cd /home/ubuntu/FedScale/dataset && \
                 chmod +x download.sh && \
                 ./download.sh -f
                 '"
+
+ssh -oStrictHostKeyChecking=no -p$PORT \
+        ubuntu@$IP "sudo bash -c 'chown -Rf ubuntu:ubuntu /home/ubuntu/*'"
 
 # ssh -oStrictHostKeyChecking=no -p$PORT \
 #         ubuntu@$IP "sudo bash -c 'rm -rf /home/ubuntu/FedScale/dataset && \

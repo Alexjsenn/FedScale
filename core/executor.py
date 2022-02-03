@@ -147,7 +147,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         self.control_manager = BaseManager(address=(ps_ip, ps_port), authkey=b'FLPerf')
         start_time, is_connected = time.time(), False
 
-        while time.time() - start_time < 15 and not is_connected:
+        while time.time() - start_time < 100 and not is_connected:
             try:
                 self.control_manager.connect()
                 is_connected = True

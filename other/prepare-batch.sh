@@ -5,7 +5,7 @@ SCREENNAME="prepare-new"
 screen -dmS $SCREENNAME
 
 
-for ii in {101}; do
+for ii in {102..125}; do
     WINDOW="agent"$ii
     echo $WINDOW
     screen -S $SCREENNAME -X screen -t $WINDOW
