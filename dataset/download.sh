@@ -32,6 +32,7 @@ Help()
    echo "-f     Download FEMNIST dataset (about 327M)"    
    echo "-o     Download StackOverflow dataset (about 13G)"
    echo "-b     Download Blog dataset (about 833M)"
+   echo "-z  Download CIFAR-100 dataset (less than 200M)" ###MDMA
 }
 
 speech()
@@ -71,6 +72,26 @@ open_images()
         echo -e "${RED}Open Images dataset already exists under ${DIR}/open_images/!"
 fi
 }
+###MDMA
+cifar100() 
+{
+    if [ ! -d "${DIR}/cifar100/client_data_mapping/" ]; 
+    then
+        echo "Downloading cifar100 dataset ..."   
+        wget -O ${DIR}/cifar100.tar.gz https://www.dropbox.com/s/oukzxrpk5n4a1qw/cifar100.tar.gz?dl=1  
+        
+        echo "Dataset downloaded, now decompressing..." 
+        tar -xf ${DIR}/cifar100.tar.gz -C ${DIR}
+
+        echo "Removing compressed file..."
+        rm -f ${DIR}/cifar100.tar.gz
+
+        echo -e "${GREEN}cifar100 dataset downloaded!${NC}"
+    else
+        echo -e "${RED}cifar100 dataset already exists under ${DIR}/cifar100/!"
+fi
+}
+###
 
 amazon_review() 
 {
@@ -339,7 +360,7 @@ femnist()
 fi
 }
 
-while getopts ":hsoacegildrtwfxo" option; do
+while getopts ":hsoacegildrtwfxzo" option; do
    case $option in
       h ) # display Help
          Help
@@ -388,6 +409,9 @@ while getopts ":hsoacegildrtwfxo" option; do
          ;;    
       b )
          blog
+         ;;
+      z ) ###MDMA
+         cifar100
          ;;   
       o )
          stackoverflow
