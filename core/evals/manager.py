@@ -59,17 +59,21 @@ def process_cmd(yaml_file):
             log_path = os.path.join(job_conf[conf_name], 'log', job_name, time_stamp)
 
     total_gpu_processes =  sum([sum(x) for x in total_gpus])
-    # =========== Submit job to parameter server ============
-    running_vms.add(ps_ip)
-    ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank=0 --num_executors={total_gpu_processes} --executor_configs={executor_configs} "
 
     with open(f"{job_name}_logging", 'wb') as fout:
         pass
 
-    print(f"Starting aggregator on {ps_ip}...")
-    with open(f"{job_name}_logging", 'a') as fout:
-        subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
-                        shell=True, stdout=fout, stderr=fout)
+    # =========== Submit job to parameter servers ============
+    ps_rank_id = 1
+    for ps_ip in ps_ips:
+        running_vms.add(ps_ip)
+        ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={total_gpu_processes} --executor_configs={executor_configs} "
+        ps_rank_id += 1
+        
+        print(f"Starting aggregator on {ps_ip}...")
+        with open(f"{job_name}_logging", 'a') as fout:
+            subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
+                            shell=True, stdout=fout, stderr=fout)
 
     time.sleep(3)
     # =========== Submit job to each worker ============

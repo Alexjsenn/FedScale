@@ -74,7 +74,7 @@ class Aggregator(object):
         self.executors = ExecutorConnections(args.executor_configs, args.base_port)
 
         # ======== env information ========
-        self.this_rank = 0
+        self.this_rank = args.this_rank
         self.global_virtual_clock = 0.
         self.round_duration = 0.
         self.resource_manager = ResourceManager()
