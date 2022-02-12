@@ -1,0 +1,2 @@
+# Filter logs for aggregator reports of accuracy
+grep -hnr "aggregator.py:419" femnist_logging >> filtered.txt
