@@ -8,7 +8,31 @@ ps_ip: 10.30.74.7
 # Note that if we collocate ps and worker on same GPU, then we need to decrease this number of available processes on that GPU by 1
 # E.g., master node has 4 available processes, then 1 for the ps, and worker should be set to: worker:3
 worker_ips: 
-    - 10.30.74.11:[4]
+    - 10.30.74.101:[4]
+    - 10.30.74.102:[4]
+    - 10.30.74.103:[4]
+    - 10.30.74.104:[4]
+    - 10.30.74.105:[4]
+    - 10.30.74.106:[4]
+    - 10.30.74.107:[4]
+    - 10.30.74.108:[4]
+    - 10.30.74.109:[4]
+    - 10.30.74.110:[4]
+    - 10.30.74.111:[4]
+    - 10.30.74.112:[4]
+    - 10.30.74.113:[4]
+    - 10.30.74.114:[4]
+    - 10.30.74.115:[4]
+    - 10.30.74.116:[4]
+    - 10.30.74.117:[4]
+    - 10.30.74.118:[4]
+    - 10.30.74.119:[4]
+    - 10.30.74.120:[4]
+    - 10.30.74.121:[4]
+    - 10.30.74.122:[4]
+    - 10.30.74.123:[4]
+    - 10.30.74.124:[4]
+    - 10.30.74.125:[4]
 
 exp_path: /home/ubuntu/FedScale/core
 
@@ -32,7 +56,7 @@ setup_commands:
 job_conf: 
     - job_name: femnist                   # Generate logs under this folder: log_path/job_name/time_stamp
     - log_path: /home/ubuntu/FedScale/core/evals # Path of log files
-    - total_worker: 4                   # Number of participants per round, we use K=100 in our paper, large K will be much slower
+    - total_worker: 100  #58 for 2 epochs                  # Number of participants per round, we use K=100 in our paper, large K will be much slower
     - data_set: femnist                   # Dataset: openImg, google_speech, stackoverflow
     - data_dir: /home/ubuntu/FedScale/dataset/data/femnist    # Path of the dataset
     - data_map_file: /home/ubuntu/FedScale/dataset/data/femnist/client_data_mapping/train.csv              # Allocation of data to each client, turn to iid setting if not provided
@@ -46,7 +70,7 @@ job_conf:
     - num_loaders: 2
     - yogi_eta: 3e-3 
     - yogi_tau: 1e-8
-    - local_steps: 30
+    - local_steps: 20
     - learning_rate: 0.05
     - batch_size: 20
     - test_bsz: 20
