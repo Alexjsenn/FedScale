@@ -72,6 +72,7 @@ class Aggregator(object):
         self.args = args
         self.device = args.cuda_device if args.use_cuda else torch.device('cpu')
         self.executors = ExecutorConnections(args.executor_configs, args.base_port)
+        self.log_summary = f"AGGREGATOR RANK {args.this_rank} - "
 
         # ======== env information ========
         self.this_rank = args.this_rank
@@ -152,7 +153,7 @@ class Aggregator(object):
     def init_control_communication(self, ps_ip, ps_port, executors):
         # Create communication channel between aggregator and worker
         # This channel serves control messages
-        logging.info(f"Start to initiate {ps_ip}:{ps_port} for control plane communication ...")
+        logging.info(f"{self.log_summary} Start to initiate {ps_ip}:{ps_port} for control plane communication ...")
 
         dummy_que = {executorId:Queue() for executorId in executors}
         # create multiple queue for each aggregator_executor pair
@@ -215,7 +216,7 @@ class Aggregator(object):
     def executor_info_handler(self, executorId, info):
 
         self.registered_executor_info.add(executorId)
-        logging.info(f"Received executor {executorId} information, {len(self.registered_executor_info)}/{len(self.executors)}")
+        logging.info(f"{self.log_summary} Received executor {executorId} information, {len(self.registered_executor_info)}/{len(self.executors)}")
         # have collected all executors
         # In this simulation, we run data split on each worker, so collecting info from one executor is enough
         # Waiting for data information from executors, or timeout
@@ -223,7 +224,7 @@ class Aggregator(object):
         if len(self.registered_executor_info) == len(self.executors):
 
             clientId = 1
-            logging.info(f"Loading {len(info['size'])} client traces ...")
+            logging.info(f"{self.log_summary} Loading {len(info['size'])} client traces ...")
 
             for _size in info['size']:
                 # since the worker rankId starts from 1, we also configure the initial dataId as 1
@@ -348,14 +349,14 @@ class Aggregator(object):
                                     success=False)
 
         avg_loss = sum(self.loss_accumulator)/max(1, len(self.loss_accumulator))
-        logging.info(f"Wall clock: {round(self.global_virtual_clock)} s, Epoch: {self.epoch}, Planned participants: " + \
+        logging.info(f"{self.log_summary} Wall clock: {round(self.global_virtual_clock)} s, Epoch: {self.epoch}, Planned participants: " + \
             f"{len(self.sampled_participants)}, Succeed participants: {len(self.stats_util_accumulator)}, Training loss: {avg_loss}")
 
         # update select participants
         self.sampled_participants = self.select_participants(select_num_participants=self.args.total_worker, overcommitment=self.args.overcommitment)
         clientsToRun, round_stragglers, virtual_client_clock, round_duration = self.tictak_client_tasks(self.sampled_participants, self.args.total_worker)
 
-        logging.info(f"Selected participants to run: {clientsToRun}:\n{virtual_client_clock}")
+        logging.info(f"{self.log_summary} Selected participants to run: {clientsToRun}:\n{virtual_client_clock}")
 
         # Issue requests to the resource manager; Tasks ordered by the completion time
         self.resource_manager.register_tasks(clientsToRun)
@@ -413,8 +414,8 @@ class Aggregator(object):
                     }
 
 
-            logging.info("FL Testing in epoch: {}, virtual_clock: {}, top_1: {} %, top_5: {} %, test loss: {:.4f}, test len: {}"
-                    .format(self.epoch, self.global_virtual_clock, self.testing_history['perf'][self.epoch]['top_1'],
+            logging.info("{} FL Testing in epoch: {}, virtual_clock: {}, top_1: {} %, top_5: {} %, test loss: {:.4f}, test len: {}"
+                    .format(self.log_summary, self.epoch, self.global_virtual_clock, self.testing_history['perf'][self.epoch]['top_1'],
                     self.testing_history['perf'][self.epoch]['top_5'], self.testing_history['perf'][self.epoch]['loss'],
                     self.testing_history['perf'][self.epoch]['test_len']))
 
@@ -449,7 +450,7 @@ class Aggregator(object):
                 logging.warning(f"{e}: Have not received executor information. This may due to slow data loading (e.g., Reddit)")
                 time.sleep(30)
 
-        logging.info("Have received all executor information")
+        logging.info(f"{self.log_summary} Have received all executor information")
 
         while True:
             if len(self.event_queue) != 0:
@@ -503,7 +504,7 @@ class Aggregator(object):
                 event_msg, executorId, results = event_dict['event'], event_dict['executorId'], event_dict['return']
 
                 if event_msg != 'train_nowait':
-                    logging.info(f"Round {self.epoch}: Receive (Event:{event_msg.upper()}) from (Executor:{executorId})")
+                    logging.info(f"{self.log_summary} Round {self.epoch}: Receive (Event:{event_msg.upper()}) from (Executor:{executorId})")
 
                 # collect training returns from the executor
                 if event_msg == 'train_nowait':
@@ -533,7 +534,7 @@ class Aggregator(object):
 
 
     def stop(self):
-        logging.info(f"Terminating the aggregator ...")
+        logging.info(f"{self.log_summary} Terminating the aggregator ...")
         time.sleep(5)
         self.control_manager.shutdown()
 
