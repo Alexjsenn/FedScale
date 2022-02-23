@@ -7,6 +7,7 @@ import random
 import os, subprocess
 import pickle, datetime
 from math import floor
+from functools import reduce
 
 def load_yaml_conf(yaml_file):
     with open(yaml_file) as fin:
@@ -47,22 +48,51 @@ def process_cmd(yaml_file):
         return
 
     worker_processes_per_ps_processes = floor(total_worker_gpu_processes/total_ps_gpu_processes)
-
-    if (worker_processes_per_ps_processes % 4 != 0):
-        print("WARNING: This script only works if every ps gpu has its own worker with 4 gpus.")
-        return
-
-    workers_per_ps_process = floor(worker_processes_per_ps_processes / 4)
     worker_ips_and_processes = yaml_conf['worker_ips']
 
-    def split_list(list, sub_list_length):
-        for i in range(0, len(list), sub_list_length):
-            yield list[i:i+sub_list_length]
-    
-    executor_configs = list(map(lambda sublist : "=".join(sublist), split_list(worker_ips_and_processes, workers_per_ps_process)))
+    def ip_gpu_to_repeated_ip_list(str):
+        ip, gpu = str.strip().split(":")
+        sublist = []
+        for i in range(int(gpu.strip("[]"))):
+            sublist.append(ip)
+        return sublist
+
+    def take_chunks(list, sublist_length):
+        for i in range(0, len(list), sublist_length):
+            yield list[i:i+sublist_length]
+
+    worker_rank_ips = \
+        list( \
+            map( \
+                lambda x : ":".join([str(x[0] + 1),x[1]]), \
+                list( \
+                    enumerate( \
+                        reduce( \
+                            list.__add__,
+                            list(\
+                                map(\
+                                    ip_gpu_to_repeated_ip_list, \
+                                    worker_ips_and_processes \
+                                ) \
+                            ) \
+                        ) \
+                    ) \
+                ) \
+            ) \
+        )
+
+    executor_configs = \
+        list(\
+            map( \
+                lambda sublist : "=".join(sublist), \
+                take_chunks( \
+                    worker_rank_ips, \
+                    worker_processes_per_ps_processes \
+                ) \
+            ) \
+        )
 
     job_confs = []
-    ps_index = 0
     ps_port = base_ps_port
     manager_port = base_manager_port
 
@@ -131,9 +161,8 @@ def process_cmd(yaml_file):
                 conf_script = conf_scripts[ps_fulfilled]
                 worker_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['executor_entry']} {conf_script} --this_rank={rank_id} --num_executors={worker_processes_per_ps_processes} --cuda_device=cuda:{cuda_id} "
                 
-                if (rank_id % worker_processes_per_ps_processes == 0):
+                if ((rank_id) % worker_processes_per_ps_processes == 0):
                     ps_fulfilled += 1
-                    rank_id = 0
 
                 rank_id += 1
 

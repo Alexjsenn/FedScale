@@ -27,14 +27,11 @@ class ExecutorConnections(object):
         self.executors = {}
         self.base_port = base_port
 
-        executorId = 0
-        for ip_numgpu in config.split("="):
-            ip, numgpu = ip_numgpu.split(':')
-            for numexe in numgpu.strip()[1:-1].split(','):
-                for _ in range(int(numexe.strip())):
-                    executorId += 1
-                    self.executors[executorId] = ExecutorConnections._ExecutorContext(executorId)
-                    self.executors[executorId].address = '{}:{}'.format(ip, self.base_port + executorId)
+        for rank_ip in config.split("="):
+            rank, ip = rank_ip.split(':')
+            executorId = int(rank)
+            self.executors[executorId] = ExecutorConnections._ExecutorContext(executorId)
+            self.executors[executorId].address = '{}:{}'.format(ip, self.base_port + executorId)
 
     def __len__(self):
         return len(self.executors)

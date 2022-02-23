@@ -294,7 +294,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
             test_res = client.test(args, self.this_rank, self.model, device=device)
             _, _, _, testResults = test_res
         else:
-            data_loader = select_dataset(self.this_rank, self.testing_sets, batch_size=args.test_bsz, isTest=True, collate_fn=self.collate_fn)
+            data_loader = select_dataset(self.this_rank % self.num_executors, self.testing_sets, batch_size=args.test_bsz, isTest=True, collate_fn=self.collate_fn)
 
             if self.task == 'voice':
                 criterion = CTCLoss(reduction='mean').to(device=device)
