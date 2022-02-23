@@ -6,6 +6,7 @@ import time
 import random
 import os, subprocess
 import pickle, datetime
+from math import floor
 
 def load_yaml_conf(yaml_file):
     with open(yaml_file) as fin:
@@ -16,15 +17,18 @@ def process_cmd(yaml_file):
 
     yaml_conf = load_yaml_conf(yaml_file)
 
-    ps_ip = yaml_conf['ps_ip']
-    worker_ips, total_gpus = [], []
+    ps_ips, worker_ips, total_ps_gpus, total_worker_gpus = [], [], [], []
     cmd_script_list = []
 
-    executor_configs = "=".join(yaml_conf['worker_ips'])
+    for ip_gpu in yaml_conf['ps_ips']:
+        ip, gpu_list = ip_gpu.strip().split(':')
+        ps_ips.append(ip)
+        total_ps_gpus.append(eval(gpu_list))
+
     for ip_gpu in yaml_conf['worker_ips']:
         ip, gpu_list = ip_gpu.strip().split(':')
         worker_ips.append(ip)
-        total_gpus.append(eval(gpu_list))
+        total_worker_gpus.append(eval(gpu_list))
 
     time_stamp = datetime.datetime.fromtimestamp(time.time()).strftime('%m%d_%H%M%S')
     running_vms = set()
@@ -32,16 +36,49 @@ def process_cmd(yaml_file):
     log_path = './logs'
     submit_user = f"{yaml_conf['auth']['ssh_user']}@" if len(yaml_conf['auth']['ssh_user']) else ""
 
-    job_conf = {'time_stamp':time_stamp,
-                'ps_ip':ps_ip,
-                'ps_port':random.randint(1000, 60000),
-                'manager_port':random.randint(1000, 60000)
-                }
+    base_ps_port = random.randint(1000, 59900)
+    base_manager_port = random.randint(1000, 59900)
 
-    for conf in yaml_conf['job_conf']:
-        job_conf.update(conf)
+    total_ps_gpu_processes =  sum([sum(x) for x in total_ps_gpus])
+    total_worker_gpu_processes =  sum([sum(x) for x in total_worker_gpus])
 
-    conf_script = ''
+    if (total_worker_gpu_processes % total_ps_gpu_processes != 0):
+        print("WARNING: Total worker gpus can not be equally distributed among parameter servers. Ensure number of worker gpus present is a mutiple of the number of parameter server gpus present.")
+        return
+
+    worker_processes_per_ps_processes = floor(total_worker_gpu_processes/total_ps_gpu_processes)
+
+    if (worker_processes_per_ps_processes % 4 != 0):
+        print("WARNING: This script only works if every ps gpu has its own worker with 4 gpus.")
+        return
+
+    workers_per_ps_process = floor(worker_processes_per_ps_processes / 4)
+    worker_ips_and_processes = yaml_conf['worker_ips']
+
+    def split_list(list, sub_list_length):
+        for i in range(0, len(list), sub_list_length):
+            yield list[i:i+sub_list_length]
+    
+    executor_configs = list(map(lambda sublist : "=".join(sublist), split_list(worker_ips_and_processes, workers_per_ps_process)))
+
+    job_confs = []
+    ps_index = 0
+    ps_port = base_ps_port
+    manager_port = base_manager_port
+
+    for ps_ip, gpu in zip(ps_ips, total_ps_gpus):
+        for _ in range(gpu[0]):
+            job_conf = {'time_stamp':time_stamp,
+                        'ps_ip':ps_ip,
+                        'ps_port':ps_port,
+                        'manager_port':manager_port
+                        }
+            for conf in yaml_conf['job_conf']:
+                job_conf.update(conf)
+            job_confs.append(job_conf)
+            ps_port += 1
+            manager_port += 1
+
     setup_cmd = ''
     if yaml_conf['setup_commands'] is not None:
         setup_cmd += (yaml_conf['setup_commands'][0] + ' && ')
@@ -51,40 +88,53 @@ def process_cmd(yaml_file):
     cmd_sufix = f" "
 
 
-    for conf_name in job_conf:
-        conf_script = conf_script + f' --{conf_name}={job_conf[conf_name]}'
-        if conf_name == "job_name":
-            job_name = job_conf[conf_name]
-        if conf_name == "log_path":
-            log_path = os.path.join(job_conf[conf_name], 'log', job_name, time_stamp)
-
-    total_gpu_processes =  sum([sum(x) for x in total_gpus])
+    conf_scripts = []
+    for job_conf in job_confs:
+        conf_script = ''
+        for conf_name in job_conf:
+            conf_script = conf_script + f' --{conf_name}={job_conf[conf_name]}'
+            if conf_name == "job_name":
+                job_name = job_conf[conf_name]
+            if conf_name == "log_path":
+                log_path = os.path.join(job_conf[conf_name], 'log', job_name, time_stamp)
+        conf_scripts.append(conf_script)
 
     with open(f"{job_name}_logging", 'wb') as fout:
         pass
 
     # =========== Submit job to parameter servers ============
     ps_rank_id = 1
-    for ps_ip in ps_ips:
+    for ps_ip, gpu in zip(ps_ips, total_ps_gpus):
         running_vms.add(ps_ip)
-        ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={total_gpu_processes} --executor_configs={executor_configs} "
-        ps_rank_id += 1
         
-        print(f"Starting aggregator on {ps_ip}...")
-        with open(f"{job_name}_logging", 'a') as fout:
-            subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
-                            shell=True, stdout=fout, stderr=fout)
+        print(f"Starting aggregators on {ps_ip}...")
+        for cuda_id in range(len(gpu)):
+            for _  in range(gpu[cuda_id]):
+                conf_script = conf_scripts[ps_rank_id - 1]
+                ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={worker_processes_per_ps_processes} --executor_configs={executor_configs[ps_rank_id - 1]}"
+                ps_rank_id += 1
+
+                with open(f"{job_name}_logging", 'a') as fout:
+                    subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
+                                    shell=True, stdout=fout, stderr=fout)
 
     time.sleep(3)
     # =========== Submit job to each worker ============
     rank_id = 1
-    for worker, gpu in zip(worker_ips, total_gpus):
+    ps_fulfilled = 0
+    for worker, gpu in zip(worker_ips, total_worker_gpus):
         running_vms.add(worker)
         print(f"Starting workers on {worker} ...")
 
         for cuda_id in range(len(gpu)):
-            for _  in range(gpu[cuda_id]):
-                worker_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['executor_entry']} {conf_script} --this_rank={rank_id} --num_executors={total_gpu_processes} --cuda_device=cuda:{cuda_id} "
+            for _ in range(gpu[cuda_id]):
+                conf_script = conf_scripts[ps_fulfilled]
+                worker_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['executor_entry']} {conf_script} --this_rank={rank_id} --num_executors={worker_processes_per_ps_processes} --cuda_device=cuda:{cuda_id} "
+                
+                if (rank_id % worker_processes_per_ps_processes == 0):
+                    ps_fulfilled += 1
+                    rank_id = 0
+
                 rank_id += 1
 
                 with open(f"{job_name}_logging", 'a') as fout:
