@@ -23,10 +23,10 @@ class Client(object):
         trained_unique_samples = min(len(client_data.dataset), conf.local_steps * conf.batch_size)
         global_model = None
 
-        if conf.gradient_policy == 'prox':
+        if conf.gradient_policy == 'fed-prox':
             # could be move to optimizer
             global_model = [param.data.clone() for param in model.parameters()]
-        
+
         if conf.task == "detection":
             lr = conf.learning_rate
             params = []
@@ -40,7 +40,7 @@ class Client(object):
             optimizer = torch.optim.SGD(params, momentum=cfg.TRAIN.MOMENTUM)
 
         elif conf.task == 'nlp':
-            
+
             no_decay = ["bias", "LayerNorm.weight"]
             optimizer_grouped_parameters = [
                 {
@@ -52,7 +52,8 @@ class Client(object):
                     "weight_decay": 0.0,
                 },
             ]
-            optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=conf.learning_rate)
+            # Bert pre-training setup
+            optimizer = torch.optim.Adam(optimizer_grouped_parameters, lr=conf.learning_rate, weight_decay=1e-2)
         else:
             optimizer = torch.optim.SGD(model.parameters(), lr=conf.learning_rate, momentum=0.9, weight_decay=5e-4)
 
@@ -66,6 +67,7 @@ class Client(object):
 
         error_type = None
         completed_steps = 0
+        loss_squre = 0
 
         if conf.task == "detection":
             im_data = Variable(torch.FloatTensor(1).cuda())
@@ -76,6 +78,11 @@ class Client(object):
         # TODO: One may hope to run fixed number of epochs, instead of iterations
         while completed_steps < conf.local_steps:
             try:
+
+                if len(client_data) == 0:
+                    logging.info(f"Error : data size = 0")
+                    break
+
                 for data_pair in client_data:
 
                     if conf.task == 'nlp':
@@ -99,10 +106,10 @@ class Client(object):
                         num_boxes.resize_(data[3].size()).copy_(data[3])
                     elif conf.task == 'speech':
                         data = torch.unsqueeze(data, 1).to(device=device)
-                    elif conf.task == 'text_clf':
+                    elif conf.task == 'text_clf' and  conf.model == 'albert-base-v2':
                         (data, masks) = data
                         data, masks = Variable(data).to(device=device), Variable(masks).to(device=device)
-            
+
                     else:
                         data = Variable(data).to(device=device)
 
@@ -115,7 +122,7 @@ class Client(object):
                         outputs, output_sizes = model(data, input_sizes)
                         outputs = outputs.transpose(0, 1).float()  # TxNxH
                         loss = criterion(outputs, target, output_sizes, target_sizes)
-                    elif conf.task == 'text_clf':
+                    elif conf.task == 'text_clf' and  conf.model == 'albert-base-v2':
                         outputs = model(data , attention_mask=masks, labels=target)
                         loss = outputs.loss
                         output = outputs.logits
@@ -140,7 +147,7 @@ class Client(object):
 
                     # ======== collect training feedback for other decision components [e.g., kuiper selector] ======
 
-                    if conf.task == 'nlp' or  conf.task == 'text_clf'  :
+                    if conf.task == 'nlp' or ( conf.task == 'text_clf' and  conf.model == 'albert-base-v2'):
                         loss_list = [loss.item()] #[loss.mean().data.item()]
 
                     elif conf.task == "detection":
@@ -150,8 +157,8 @@ class Client(object):
                         loss_list = loss.tolist()
                         loss = loss.mean()
 
-                    temp_loss = sum([l**2 for l in loss_list])/float(len(loss_list))
-
+                    temp_loss = sum(loss_list)/float(len(loss_list))
+                    loss_squre = sum([l**2 for l in loss_list])/float(len(loss_list))
                     # only measure the loss of the first epoch
                     if completed_steps < len(client_data):
                         if epoch_train_loss == 1e-4:
@@ -166,7 +173,7 @@ class Client(object):
 
                     # ========= Weight handler ========================
                     self.optimizer.update_client_weight(conf, model, global_model if global_model is not None else None  )
-                    
+
                     completed_steps += 1
 
                     if completed_steps == conf.local_steps:
@@ -176,10 +183,10 @@ class Client(object):
                 error_type = ex
                 break
 
-        model_param = [param.data.cpu().numpy() for param in model.parameters()]
+        model_param = [param.data.cpu().numpy() for param in model.state_dict().values()]
         results = {'clientId':clientId, 'moving_loss': epoch_train_loss,
                   'trained_size': completed_steps*conf.batch_size, 'success': completed_steps > 0}
-        results['utility'] = math.sqrt(epoch_train_loss)*float(trained_unique_samples)
+        results['utility'] = math.sqrt(loss_squre)*float(trained_unique_samples)
 
         if error_type is None:
             logging.info(f"Training of (CLIENT: {clientId}) completes, {results}")

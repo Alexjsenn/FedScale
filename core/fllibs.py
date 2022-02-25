@@ -36,6 +36,7 @@ if args.task == 'nlp' or args.task == 'text_clf':
         AlbertTokenizer,
         AutoTokenizer,
         MobileBertForPreTraining,
+        AutoModelWithLMHead
     )
     tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2', do_lower_case=True)
 elif args.task == 'speech':
@@ -83,9 +84,9 @@ def init_model():
     logging.info("Initializing the model ...")
 
     if args.task == 'nlp':
-        config = AutoConfig.from_pretrained(os.path.join(args.data_dir, args.model_name+'-config.json'))
+        config = AutoConfig.from_pretrained(os.path.join(args.data_dir, args.model+'-config.json'))
         model = AutoModelWithLMHead.from_config(config)
-        tokenizer = AlbertTokenizer.from_pretrained(args.model_name, do_lower_case=True)
+        tokenizer = AlbertTokenizer.from_pretrained(args.model, do_lower_case=True)
 
         # model_name = 'google/mobilebert-uncased'
         # config = AutoConfig.from_pretrained(model_name)
@@ -94,11 +95,18 @@ def init_model():
         # model = AutoModelWithLMHead.from_config(config)
 
     elif args.task == 'text_clf':
-        config = AutoConfig.from_pretrained(os.path.join(args.data_dir, 'albert-base-v2-config.json'))
-        config.num_labels = outputClass[args.data_set]
-        from transformers import AlbertForSequenceClassification
-        model = AlbertForSequenceClassification(config)
 
+        if args.model == 'albert':
+            from transformers import AlbertForSequenceClassification
+            from transformers import AutoConfig
+            config = AutoConfig.from_pretrained(os.path.join(args.log_path, 'albert-small-config.json'))
+            config.num_labels = outputClass[args.data_set]
+            model = AlbertForSequenceClassification(config) 
+        elif args.model == 'lr': 
+            from utils.models import  LogisticRegression
+            model = LogisticRegression(300, outputClass[args.data_set])
+            
+            
     elif args.task == 'tag-one-sample':
         # Load LR model for tag prediction
         model = LogisticRegression(args.vocab_token_size, args.vocab_tag_size)
@@ -249,11 +257,16 @@ def init_dataset():
             test_dataset = stackoverflow(args.data_dir, train=False)
 
         elif args.data_set == 'amazon':
-            import utils.amazon as fl_loader
-
-            train_dataset = fl_loader.AmazonReview_loader(args.data_dir, train=True, tokenizer=tokenizer, max_len=args.clf_block_size)
-            test_dataset = fl_loader.AmazonReview_loader(args.data_dir, train=False, tokenizer=tokenizer, max_len=args.clf_block_size)
-
+            if args.model == 'albert':
+                import utils.amazon as fl_loader
+                train_dataset = fl_loader.AmazonReview_loader(args.data_dir, train=True, tokenizer=tokenizer, max_len=args.clf_block_size  )
+                test_dataset = fl_loader.AmazonReview_loader(args.data_dir, train=False, tokenizer=tokenizer, max_len=args.clf_block_size )
+            
+            elif args.model == 'lr': 
+                import utils.word2vec as fl_loader
+                train_dataset = fl_loader.AmazonReview_word2vec(args.data_dir, args.embedding_file, train=True)
+                test_dataset = fl_loader.AmazonReview_word2vec( args.data_dir, args.embedding_file, train=False)
+        
         elif args.data_set == 'yelp':
             import utils.dataloaders as fl_loader
 

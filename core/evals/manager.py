@@ -20,7 +20,7 @@ def process_cmd(yaml_file):
     worker_ips, total_gpus = [], []
     cmd_script_list = []
 
-    executor_configs = ",".join(yaml_conf['worker_ips'])
+    executor_configs = "=".join(yaml_conf['worker_ips'])
     for ip_gpu in yaml_conf['worker_ips']:
         ip, gpu_list = ip_gpu.strip().split(':')
         worker_ips.append(ip)
@@ -68,7 +68,7 @@ def process_cmd(yaml_file):
 
     print(f"Starting aggregator on {ps_ip}...")
     with open(f"{job_name}_logging", 'a') as fout:
-        subprocess.Popen(f'ssh {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
+        subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{ps_ip} "{setup_cmd} {ps_cmd}"',
                         shell=True, stdout=fout, stderr=fout)
 
     time.sleep(3)
@@ -84,8 +84,8 @@ def process_cmd(yaml_file):
                 rank_id += 1
 
                 with open(f"{job_name}_logging", 'a') as fout:
-                    time.sleep(2)
-                    subprocess.Popen(f'ssh {submit_user}{worker} "{setup_cmd} {worker_cmd}"',
+                    #time.sleep(2)
+                    subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {submit_user}{worker} "{setup_cmd} {worker_cmd}"',
                                     shell=True, stdout=fout, stderr=fout)
 
     # dump the address of running workers
@@ -95,7 +95,7 @@ def process_cmd(yaml_file):
         job_meta = {'user':submit_user, 'vms': running_vms}
         pickle.dump(job_meta, fout)
 
-    print(f"Submitted job, please check your logs ({log_path}) for status")
+    print(f"Submitted job, please check your logs $HOME/{job_conf['model']}/{time_stamp} for status")
 
 def terminate(job_name):
 
@@ -112,10 +112,10 @@ def terminate(job_name):
         # os.system(f'scp shutdown.py {job_meta["user"]}{vm_ip}:~/')
         print(f"Shutting down job on {vm_ip}")
         with open(f"{job_name}_logging", 'a') as fout:
-            subprocess.Popen(f'ssh {job_meta["user"]}{vm_ip} "python {current_path}/shutdown.py {job_name}"',
+            subprocess.Popen(f'ssh -oStrictHostKeyChecking=no {job_meta["user"]}{vm_ip} "python {current_path}/shutdown.py {job_name}"',
                             shell=True, stdout=fout, stderr=fout)
 
-        # _ = os.system(f"ssh {job_meta['user']}{vm_ip} 'python {current_path}/shutdown.py {job_name}'")
+        # _ = os.system(f"ssh -oStrictHostKeyChecking=no {job_meta['user']}{vm_ip} 'python {current_path}/shutdown.py {job_name}'")
 
 if sys.argv[1] == 'submit':
     process_cmd(sys.argv[2])
@@ -123,4 +123,5 @@ elif sys.argv[1] == 'stop':
     terminate(sys.argv[2])
 else:
     print("Unknown cmds ...")
+
 

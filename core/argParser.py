@@ -13,8 +13,13 @@ parser.add_argument('--num_executors', type=int, default=4)
 parser.add_argument('--executor_configs', type=str, default='')  # seperated by ;
 parser.add_argument('--total_worker', type=int, default=0)
 parser.add_argument('--data_map_file', type=str, default=None)
+<<<<<<< HEAD
 parser.add_argument('--use_cuda', type=bool, default=False)
+=======
+parser.add_argument('--use_cuda', type=str, default='True')
+>>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
 parser.add_argument('--cuda_device', type=str, default=None)
+parser.add_argument('--base_port', type=int, default=51000)
 parser.add_argument('--time_stamp', type=str, default='logs')
 parser.add_argument('--task', type=str, default='cv')
 parser.add_argument('--pacer_delta', type=float, default=5)
@@ -44,6 +49,7 @@ parser.add_argument('--round_penalty', type=float, default=2.0)
 parser.add_argument('--clip_bound', type=float, default=0.9)
 parser.add_argument('--blacklist_rounds', type=int, default=-1)
 parser.add_argument('--blacklist_max_len', type=float, default=0.3)
+parser.add_argument('--embedding_file', type=str, default = 'glove.840B.300d.txt')
 
 
 # The configuration of different hyper-parameters for training
@@ -174,9 +180,13 @@ parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_fa
                     help='Turn off bi-directional RNNs, introduces lookahead convolution')
 
 args = parser.parse_args()
+args.use_cuda = eval(args.use_cuda)
 
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
 datasetCategories = {'Mnist': 10, 'cifar10': 10, 'cifar100': 100, "imagenet": 1000, 'emnist': 47,
                     'openImg': 596, 'google_speech': 35, 'femnist': 62, 'yelp': 5
                     }
