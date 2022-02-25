@@ -141,7 +141,7 @@ def process_cmd(yaml_file):
         for cuda_id in range(len(gpu)):
             for _  in range(gpu[cuda_id]):
                 conf_script = conf_scripts[ps_rank_id - 1]
-                ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={worker_processes_per_ps_processes} --executor_configs={executor_configs[ps_rank_id - 1]}"
+                ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={worker_processes_per_ps_processes} --num_aggregators={total_ps_gpus[0][0]} --executor_configs={executor_configs[ps_rank_id - 1]}"
                 ps_rank_id += 1
 
                 with open(f"{job_name}_logging", 'a') as fout:

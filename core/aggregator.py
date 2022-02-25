@@ -9,6 +9,7 @@ import job_api_pb2
 import io
 import torch
 import pickle
+from math import floor
 
 
 MAX_MESSAGE_LENGTH = 50000000
@@ -219,11 +220,18 @@ class Aggregator(object):
         # Waiting for data information from executors, or timeout
 
         if len(self.registered_executor_info) == len(self.executors):
+            client_traces = info['size']
+            num_aggregators = info['num_aggregators']
 
-            clientId = 1
-            logging.info(f"{self.log_summary} Loading {len(info['size'])} client traces ...")
+            clients_per_aggr = floor(len(client_traces) / num_aggregators)
 
-            for _size in info['size']:
+            start = (self.this_rank - 1) * clients_per_aggr
+            end = self.this_rank * clients_per_aggr
+            client_pool = client_traces[start:end]
+            clientId = start + 1
+            logging.info(f"{self.log_summary} Loading {len(client_pool)} client traces from {clientId} to {end}...")
+
+            for _size in client_pool:
                 # since the worker rankId starts from 1, we also configure the initial dataId as 1
                 mapped_id = clientId%len(self.client_profiles) if len(self.client_profiles) > 0 else 1
                 systemProfile = self.client_profiles.get(mapped_id, {'computation': 1.0, 'communication':1.0})
@@ -232,7 +240,7 @@ class Aggregator(object):
                     upload_epoch=self.args.local_steps, upload_size=self.model_update_size, download_size=self.model_update_size)
                 clientId += 1
 
-            logging.info("Info of all feasible clients {}".format(self.client_manager.getDataInfo()))
+            logging.info("{} Info of all feasible clients {}".format(self.log_summary, self.client_manager.getDataInfo()))
 
             # start to sample clients
             self.round_completion_handler()
@@ -439,7 +447,7 @@ class Aggregator(object):
                 for executorId in self.executors:
                     response = self.executors.get_stub(executorId).ReportExecutorInfo(
                         job_api_pb2.ReportExecutorInfoRequest())
-                    self.executor_info_handler(executorId, {"size": response.training_set_size})
+                    self.executor_info_handler(executorId, {"size": response.training_set_size, "num_aggregators": self.args.num_aggregators})
                 break
                 
             except Exception as e:
