@@ -74,16 +74,6 @@ class DataPartitioner(object):
 
         # Partition data given mapping
         self.partitions = [[] for _ in range(len(unique_clientIds))]
-<<<<<<< HEAD
-        printios = True###MDMA
-        if printios:###MDMA
-            logging.info(f'Number of idx is {len(range(len(self.data.data)))}')###MDMA
-            logging.info(f'ClientId_maps len is {len(clientId_maps)}')###MDMA
-            logging.info(f'ClientId_maps[20000] is {clientId_maps[20000]}')###MDMA
-            logging.info(f'Partitions len is {len(self.partitions)}')###MDMA
-            logging.info(f'Data verified!')###MDMA
-            printios = False###MDMA
-=======
         # printios = True###MDMA
         # if printios:###MDMA
         #     logging.info(f'Number of idx is {len(range(len(self.data.data)))}')###MDMA
@@ -92,7 +82,6 @@ class DataPartitioner(object):
         #     logging.info(f'Partitions len is {len(self.partitions)}')###MDMA
         #     logging.info(f'Data verified!')###MDMA
         #     printios = False###MDMA
->>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
         for idx in range(len(self.data.data)):
             self.partitions[clientId_maps[idx]].append(idx)
 

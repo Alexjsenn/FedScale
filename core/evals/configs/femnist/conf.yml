@@ -8,9 +8,6 @@ ps_ip: 10.30.74.7
 # Note that if we collocate ps and worker on same GPU, then we need to decrease this number of available processes on that GPU by 1
 # E.g., master node has 4 available processes, then 1 for the ps, and worker should be set to: worker:3
 worker_ips: 
-<<<<<<< HEAD
-    - 10.30.74.11:[1]
-=======
     - 10.30.74.101:[4]
     - 10.30.74.102:[4]
     - 10.30.74.103:[4]
@@ -36,7 +33,6 @@ worker_ips:
     - 10.30.74.123:[4]
     - 10.30.74.124:[4]
     - 10.30.74.125:[4]
->>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
 
 exp_path: /home/ubuntu/FedScale/core
 
