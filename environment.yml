@@ -31,4 +31,5 @@ dependencies:
     - gdown
     - sentencepiece
     - grpcio=1.43.0
+    - grpcio_tools=1.43.0
     - gym
