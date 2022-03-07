@@ -196,3 +196,64 @@ class JobService(object):
             job__api__pb2.TestResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+
+class HA_JobServiceStub(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.HA_UpdateModel = channel.stream_unary(
+                '/fedscale.HA_JobService/HA_UpdateModel',
+                request_serializer=job__api__pb2.UpdateModelRequest.SerializeToString,
+                response_deserializer=job__api__pb2.HA_UpdateModelResponse.FromString,
+                )
+
+
+class HA_JobServiceServicer(object):
+    """Missing associated documentation comment in .proto file."""
+
+    def HA_UpdateModel(self, request_iterator, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_HA_JobServiceServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'HA_UpdateModel': grpc.stream_unary_rpc_method_handler(
+                    servicer.HA_UpdateModel,
+                    request_deserializer=job__api__pb2.UpdateModelRequest.FromString,
+                    response_serializer=job__api__pb2.HA_UpdateModelResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'fedscale.HA_JobService', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+
+
+ # This class is part of an EXPERIMENTAL API.
+class HA_JobService(object):
+    """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def HA_UpdateModel(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_unary(request_iterator, target, '/fedscale.HA_JobService/HA_UpdateModel',
+            job__api__pb2.UpdateModelRequest.SerializeToString,
+            job__api__pb2.HA_UpdateModelResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
