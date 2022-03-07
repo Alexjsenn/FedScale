@@ -4,6 +4,7 @@ from fl_aggregator_libs import *
 from random import Random
 from resource_manager import ResourceManager
 import grpc
+from concurrent import futures
 import job_api_pb2_grpc
 import job_api_pb2
 import io
@@ -72,15 +73,17 @@ class AggregatorConnections(object):
             self.channel = None
             self.stub = None
             
-    def __init__(self, config, base_port=60000):
+    def __init__(self, config, parent_rank, base_port=56000):
         self.aggregators = {}
         self.base_port = base_port
+        self.base_port = 56000
 
         for rank_ip in config.split("="):
             rank, ip = rank_ip.split(':')
             aggregatorId = int(rank)
-            self.aggregators[aggregatorId] = AggregatorConnections._AggregatorContext(aggregatorId)
-            self.aggregators[aggregatorId].address = '{}:{}'.format(ip, self.base_port + aggregatorId)
+            if (aggregatorId != parent_rank):
+                self.aggregators[aggregatorId] = AggregatorConnections._AggregatorContext(aggregatorId)
+                self.aggregators[aggregatorId].address = '{}:{}'.format(ip, self.base_port + aggregatorId)
     
     def __len__(self):
         return len(self.aggregators)
@@ -90,7 +93,7 @@ class AggregatorConnections(object):
 
     def open_grpc_connection(self):
         for aggregatorId in self.aggregators:
-            logging.info('%%%%%%%%%% Opening grpc connection to aggregator ' + self.aggregators[aggregatorsId].address + ' %%%%%%%%%%')
+            logging.info('%%%%%%%%%% Opening grpc connection to aggregator ' + self.aggregators[aggregatorId].address + ' %%%%%%%%%%')
             channel = grpc.insecure_channel(
                 self.aggregators[aggregatorId].address,
                 options=[
@@ -119,7 +122,7 @@ class Aggregator(object):
         self.args = args
         self.device = args.cuda_device if args.use_cuda else torch.device('cpu')
         self.executors = ExecutorConnections(args.executor_configs, args.base_port)
-        self.aggregators = AggregatorConnections(args.aggregator_configs, args.base_port)
+        self.aggregators = AggregatorConnections(args.aggregator_configs, args.this_rank, args.base_port)
         self.log_summary = f"AGGREGATOR RANK {args.this_rank} - "
 
         # ======== env information ========
@@ -128,7 +131,7 @@ class Aggregator(object):
         self.round_duration = 0.
         self.resource_manager = ResourceManager()
         self.client_manager = self.init_client_manager(args=args)
-        self.grpc_server
+        self.grpc_server = None
 
         # ======== model and data ========
         self.model = None
@@ -231,7 +234,7 @@ class Aggregator(object):
             ],
         )
         job_api_pb2_grpc.add_HA_JobServiceServicer_to_server(self, self.grpc_server)
-        port = '[::]:{}'.format(55000 + self.this_rank)
+        port = '[::]:{}'.format(56000 + self.this_rank)
         self.grpc_server.add_insecure_port(port)
         self.grpc_server.start()
         logging.info(f'Started GRPC server at {port}')
@@ -295,7 +298,7 @@ class Aggregator(object):
             end = self.this_rank * clients_per_aggr
             client_pool = client_traces[start:end]
             clientId = start + 1
-            logging.info(f"{self.log_summary} Loading {len(client_pool)} client traces from {clientId} to {end}...")
+            logging.info(f"{self.log_summary} With {num_aggregators} aggregators, for {clients_per_aggr} clients per aggregator, loading {len(client_pool)} client traces from {clientId} to {end}...")
 
             for _size in client_pool:
                 # since the worker rankId starts from 1, we also configure the initial dataId as 1
@@ -533,12 +536,15 @@ class Aggregator(object):
 
         logging.info(f"{self.log_summary} Have received all executor information")
 
-        while time.time() - start_time < 4000:
+        """TODO: fix"""
+        while True:
             try:
                 self.aggregators.open_grpc_connection()
+                break
 
             except Exception as e:
-                self.executors.close_grpc_connection()
+                logging.error(e)
+                self.aggregators.close_grpc_connection()
                 time.sleep(10)
 
         logging.info(f"{self.log_summary} Have opened connection to all aggregators")
@@ -642,6 +648,8 @@ class Aggregator(object):
             time.sleep(0.1)
 
         self.executors.close_grpc_connection()
+        self.aggregators.close_grpc_connection()
+        self.grpc_server.stop(0)
 
 
     def stop(self):
@@ -655,9 +663,9 @@ class Aggregator(object):
         """
         logging.info('Recieved GRPC HA_UpdateModel request')
         self.HA_update_model_handler(request_iterator)
-        return job_api_pb2.HA_updateModelResponse()
+        return job_api_pb2.HA_UpdateModelResponse()
 
-    def HA_update_model_handler(request_iterator):
+    def HA_update_model_handler(self, request_iterator):
         model = init_model()
         for param, request in zip(self.model.state_dict().values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
@@ -665,10 +673,10 @@ class Aggregator(object):
             param.data = torch.load(buffer).to(device=self.device)
 
         self.HA_models.append(model)
-            """TODO dump model for manual verification"""
+        """TODO dump model for manual verification"""
 
 
-    def HA_aggregateModels():
+    def HA_aggregateModels(self):
         device = self.device
 
         """Using FEDAVG as performed above in client_completion_handler()"""
