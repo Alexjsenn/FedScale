@@ -62,6 +62,55 @@ class ExecutorConnections(object):
         return self.executors[executorId].stub
 
 
+class AggregatorConnections(object):
+    """"Helps aggregator manage its grpc connection with other aggregators (for horizontal FL)."""
+
+    class _AggregatorContext(object):
+        def __init__(self, aggregatorId):
+            self.id = aggregatorId
+            self.address = None
+            self.channel = None
+            self.stub = None
+            
+    def __init__(self, config, base_port=60000):
+        self.aggregators = {}
+        self.base_port = base_port
+
+        for rank_ip in config.split("="):
+            rank, ip = rank_ip.split(':')
+            aggregatorId = int(rank)
+            self.aggregators[aggregatorId] = AggregatorConnections._AggregatorContext(aggregatorId)
+            self.aggregators[aggregatorId].address = '{}:{}'.format(ip, self.base_port + aggregatorId)
+    
+    def __len__(self):
+        return len(self.aggregators)
+
+    def __iter__(self):
+        return iter(self.aggregators)
+
+    def open_grpc_connection(self):
+        for aggregatorId in self.aggregators:
+            logging.info('%%%%%%%%%% Opening grpc connection to aggregator ' + self.aggregators[aggregatorsId].address + ' %%%%%%%%%%')
+            channel = grpc.insecure_channel(
+                self.aggregators[aggregatorId].address,
+                options=[
+                    ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                    ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+                ]
+            )
+            self.aggregators[aggregatorId].channel = channel
+            self.aggregators[aggregatorId].stub = job_api_pb2_grpc.HA_JobServiceStub(channel)
+
+    def close_grpc_connection(self):
+        for aggregatorId in self.aggregators:
+            logging.info(f'%%%%%%%%%% Closing grpc connection with aggregator {aggregatorId} %%%%%%%%%%')
+            self.aggregators[aggregatorId].channel.close()
+
+    def get_stub(self, aggregatorId):
+        return self.aggregators[aggregatorId].stub
+
+
+
 class Aggregator(object):
     """This centralized aggregator collects training/testing feedbacks from executors"""
     def __init__(self, args):
@@ -70,6 +119,7 @@ class Aggregator(object):
         self.args = args
         self.device = args.cuda_device if args.use_cuda else torch.device('cpu')
         self.executors = ExecutorConnections(args.executor_configs, args.base_port)
+        self.aggregators = AggregatorConnections(args.aggregator_configs, args.base_port)
         self.log_summary = f"AGGREGATOR RANK {args.this_rank} - "
 
         # ======== env information ========
@@ -78,9 +128,11 @@ class Aggregator(object):
         self.round_duration = 0.
         self.resource_manager = ResourceManager()
         self.client_manager = self.init_client_manager(args=args)
+        self.grpc_server
 
         # ======== model and data ========
         self.model = None
+        self.HA_models = []
 
         # list of parameters in model.parameters()
         self.model_in_update = []
@@ -169,6 +221,20 @@ class Aggregator(object):
             self.server_event_queue[executorId] = eval('self.control_manager.get_server_event_que'+str(executorId)+'()')
 
         self.client_event_queue = self.control_manager.get_client_event()
+
+
+        self.grpc_server = grpc.server(
+            futures.ThreadPoolExecutor(max_workers=30),
+            options=[
+                ('grpc.max_send_message_length', MAX_MESSAGE_LENGTH),
+                ('grpc.max_receive_message_length', MAX_MESSAGE_LENGTH),
+            ],
+        )
+        job_api_pb2_grpc.add_HA_JobServiceServicer_to_server(self, self.grpc_server)
+        port = '[::]:{}'.format(55000 + self.this_rank)
+        self.grpc_server.add_insecure_port(port)
+        self.grpc_server.start()
+        logging.info(f'Started GRPC server at {port}')
 
 
     def init_data_communication(self):
@@ -378,6 +444,16 @@ class Aggregator(object):
 
         if self.epoch >= self.args.epochs:
             self.event_queue.append('stop')
+
+        elif self.epoch % self.args.regional_interval == 0:
+            self.event_queue.append('horizontal_update')
+            if self.epoch % self.args.eval_interval == 0:
+                self.event_queue.append('update_model')
+                self.event_queue.append('test')
+            else:
+                self.event_queue.append('update_model')
+                self.event_queue.append('start_round')
+
         elif self.epoch % self.args.eval_interval == 0:
             self.event_queue.append('update_model')
             self.event_queue.append('test')
@@ -457,6 +533,16 @@ class Aggregator(object):
 
         logging.info(f"{self.log_summary} Have received all executor information")
 
+        while time.time() - start_time < 4000:
+            try:
+                self.aggregators.open_grpc_connection()
+
+            except Exception as e:
+                self.executors.close_grpc_connection()
+                time.sleep(10)
+
+        logging.info(f"{self.log_summary} Have opened connection to all aggregators")
+
         while True:
             if len(self.event_queue) != 0:
                 event_msg = self.event_queue.popleft()
@@ -490,6 +576,26 @@ class Aggregator(object):
                                 job_api_pb2.TrainRequest(
                                     client_id=next_clientId,
                                     serialized_train_config=pickle.dumps(config)))
+
+                elif event_msg == 'horizontal_update':
+                    serialized_tensors = []
+                    # TODO: do serialization in parallel
+                    for param in self.model.state_dict().values():
+                        buffer = io.BytesIO()
+                        torch.save(param.data.to(device='cpu'), buffer)
+                        buffer.seek(0)
+                        serialized_tensors.append(buffer.read())
+
+                    for aggregatorId in self.aggregators:
+                        self.aggregators.get_stub(aggregatorId).HA_UpdateModel(
+                            job_api_pb2.UpdateModelRequest(serialized_tensor=param)
+                                for param in serialized_tensors)
+
+                    while(len(self.HA_models) != len(self.aggregators)):
+                        time.sleep(0.1)
+
+                    self.HA_aggregateModels()
+                    self.HA_models = []
 
                 elif event_msg == 'stop':
                     for executorId in self.executors:
@@ -542,6 +648,39 @@ class Aggregator(object):
         logging.info(f"{self.log_summary} Terminating the aggregator ...")
         time.sleep(5)
         self.control_manager.shutdown()
+
+
+    def HA_UpdateModel(self, request_iterator, context):
+        """A GRPC function for JobService invoked by HA_UpdateModel request
+        """
+        logging.info('Recieved GRPC HA_UpdateModel request')
+        self.HA_update_model_handler(request_iterator)
+        return job_api_pb2.HA_updateModelResponse()
+
+    def HA_update_model_handler(request_iterator):
+        model = init_model()
+        for param, request in zip(self.model.state_dict().values(), request_iterator):
+            buffer = io.BytesIO(request.serialized_tensor)
+            buffer.seek(0)
+            param.data = torch.load(buffer).to(device=self.device)
+
+        self.HA_models.append(model)
+            """TODO dump model for manual verification"""
+
+
+    def HA_aggregateModels():
+        device = self.device
+
+        """Using FEDAVG as performed above in client_completion_handler()"""
+        importance = 1./(len(self.aggregators)+1)
+
+        for idx, param in enumerate(self.model.state_dict().values()):
+            param.data = (param.data*importance).to(dtype=param.data.dtype)
+
+        for model in self.HA_models:
+            for idx, param in enumerate(self.model.state_dict().values()):
+                param.data += (torch.from_numpy(model[idx]).to(device=device)*importance).to(dtype=param.data.dtype)
+
 
 if __name__ == "__main__":
     aggregator = Aggregator(args)

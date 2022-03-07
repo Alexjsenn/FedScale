@@ -12,6 +12,7 @@ parser.add_argument('--this_rank', type=int, default=1)
 parser.add_argument('--num_executors', type=int, default=4)
 parser.add_argument('--num_aggregators', type=int, default=1)
 parser.add_argument('--executor_configs', type=str, default='')  # seperated by ;
+parser.add_argument('--aggregator_configs', type=str, default='')
 parser.add_argument('--total_worker', type=int, default=0)
 parser.add_argument('--data_map_file', type=str, default=None)
 parser.add_argument('--use_cuda', type=str, default='False')

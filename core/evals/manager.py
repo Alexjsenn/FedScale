@@ -81,6 +81,26 @@ def process_cmd(yaml_file):
             ) \
         )
 
+    aggregator_rank_ips = \
+        list( \
+            map( \
+                lambda x : ":".join([str(x[0] + 1),x[1]]), \
+                list( \
+                    enumerate( \
+                        reduce( \
+                            list.__add__,
+                            list(\
+                                map(\
+                                    ip_gpu_to_repeated_ip_list, \
+                                    yaml_conf['ps_ips'] \
+                                ) \
+                            ) \
+                        ) \
+                    ) \
+                ) \
+            ) \
+        )
+
     executor_configs = \
         list(\
             map( \
@@ -91,6 +111,8 @@ def process_cmd(yaml_file):
                 ) \
             ) \
         )
+
+    aggregator_configs = "=".join(aggregator_rank_ips)
 
     job_confs = []
     ps_port = base_ps_port
@@ -141,7 +163,7 @@ def process_cmd(yaml_file):
         for cuda_id in range(len(gpu)):
             for _  in range(gpu[cuda_id]):
                 conf_script = conf_scripts[ps_rank_id - 1]
-                ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={worker_processes_per_ps_processes} --num_aggregators={total_ps_gpus[0][0]} --executor_configs={executor_configs[ps_rank_id - 1]}"
+                ps_cmd = f" python {yaml_conf['exp_path']}/{yaml_conf['aggregator_entry']} {conf_script} --this_rank={ps_rank_id} --num_executors={worker_processes_per_ps_processes} --num_aggregators={total_ps_gpus[0][0]} --executor_configs={executor_configs[ps_rank_id - 1]} --aggregator_configs={aggregator_configs}"
                 ps_rank_id += 1
 
                 with open(f"{job_name}_logging", 'a') as fout:
