@@ -237,7 +237,7 @@ class Aggregator(object):
         port = '[::]:{}'.format(56000 + self.this_rank)
         self.grpc_server.add_insecure_port(port)
         self.grpc_server.start()
-        logging.info(f'Started GRPC server at {port}')
+        logging.info(f'AGGREGATOR {self.this_rank}: Started GRPC server at {port}')
 
 
     def init_data_communication(self):
@@ -499,7 +499,7 @@ class Aggregator(object):
 
 
             logging.info("{} FL Testing in epoch: {}, virtual_clock: {}, top_1: {} %, top_5: {} %, test loss: {:.4f}, test len: {}"
-                    .format(self.log_summary, self.epoch, self.global_virtual_clock, self.testing_history['perf'][self.epoch]['top_1'],
+                    .format( self.log_summary, self.epoch, self.global_virtual_clock, self.testing_history['perf'][self.epoch]['top_1'],
                     self.testing_history['perf'][self.epoch]['top_5'], self.testing_history['perf'][self.epoch]['loss'],
                     self.testing_history['perf'][self.epoch]['test_len']))
 
@@ -516,7 +516,7 @@ class Aggregator(object):
         return conf
 
     def event_monitor(self):
-        logging.info("Start monitoring events ...")
+        logging.info(f"AGGREGATOR {self.this_rank}: Start monitoring events ...")
         start_time = time.time()
         time.sleep(20)
 
@@ -586,6 +586,9 @@ class Aggregator(object):
                 elif event_msg == 'horizontal_update':
                     serialized_tensors = []
                     # TODO: do serialization in parallel
+                    path = os.path.join(logDir, f'GlobalModel_pre_Agg{self.this_rank}')
+                    torch.save(self.model, path)
+
                     for param in self.model.state_dict().values():
                         buffer = io.BytesIO()
                         torch.save(param.data.to(device='cpu'), buffer)
@@ -661,18 +664,20 @@ class Aggregator(object):
     def HA_UpdateModel(self, request_iterator, context):
         """A GRPC function for JobService invoked by HA_UpdateModel request
         """
-        logging.info('Recieved GRPC HA_UpdateModel request')
+        logging.info(f'AGGREGATOR {self.this_rank}: Recieved GRPC HA_UpdateModel request')
         self.HA_update_model_handler(request_iterator)
         return job_api_pb2.HA_UpdateModelResponse()
 
     def HA_update_model_handler(self, request_iterator):
         model = init_model()
-        for param, request in zip(self.model.state_dict().values(), request_iterator):
+        for param, request in zip(model.state_dict().values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
             buffer.seek(0)
             param.data = torch.load(buffer).to(device=self.device)
 
         self.HA_models.append(model)
+        path = os.path.join(logDir, f'GlobalModel_recievedby_Agg{self.this_rank}')
+        torch.save(model, path)
         """TODO dump model for manual verification"""
 
 
@@ -686,8 +691,12 @@ class Aggregator(object):
             param.data = (param.data*importance).to(dtype=param.data.dtype)
 
         for model in self.HA_models:
-            for idx, param in enumerate(self.model.state_dict().values()):
-                param.data += (torch.from_numpy(model[idx]).to(device=device)*importance).to(dtype=param.data.dtype)
+            for param, update in zip(self.model.state_dict().values(), model.state_dict().values()):
+                param.data += (update.to(device=device)*importance).to(dtype=param.data.dtype)
+
+        # Dump the result for manual verification
+        path = os.path.join(logDir, f'GlobalModel_post_Agg{self.this_rank}')
+        torch.save(self.model, path)
 
 
 if __name__ == "__main__":
