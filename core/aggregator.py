@@ -586,7 +586,7 @@ class Aggregator(object):
                 elif event_msg == 'horizontal_update':
                     serialized_tensors = []
                     # TODO: do serialization in parallel
-                    path = os.path.join(logDir, f'GlobalModel_pre_Agg{self.this_rank}')
+                    path = os.path.join(logDir, f'GlobalModel_pre_ep{self.epoch}_Agg{self.this_rank}')
                     torch.save(self.model, path)
 
                     for param in self.model.state_dict().values():
@@ -669,14 +669,14 @@ class Aggregator(object):
         return job_api_pb2.HA_UpdateModelResponse()
 
     def HA_update_model_handler(self, request_iterator):
-        model = init_model()
+        model = self.init_model()
         for param, request in zip(model.state_dict().values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
             buffer.seek(0)
             param.data = torch.load(buffer).to(device=self.device)
 
         self.HA_models.append(model)
-        path = os.path.join(logDir, f'GlobalModel_recievedby_Agg{self.this_rank}')
+        path = os.path.join(logDir, f'GlobalModel_recievedby_ep{self.epoch}_Agg{self.this_rank}')
         torch.save(model, path)
         """TODO dump model for manual verification"""
 
@@ -695,7 +695,7 @@ class Aggregator(object):
                 param.data += (update.to(device=device)*importance).to(dtype=param.data.dtype)
 
         # Dump the result for manual verification
-        path = os.path.join(logDir, f'GlobalModel_post_Agg{self.this_rank}')
+        path = os.path.join(logDir, f'GlobalModel_post_ep{self.epoch}_Agg{self.this_rank}')
         torch.save(self.model, path)
 
 
