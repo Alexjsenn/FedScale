@@ -74,6 +74,7 @@ class AggregatorConnections(object):
             self.stub = None
             
     def __init__(self, config, parent_rank, base_port=56000):
+        self.parent_rank = parent_rank
         self.aggregators = {}
         self.base_port = base_port
         self.base_port = 56000
@@ -93,7 +94,7 @@ class AggregatorConnections(object):
 
     def open_grpc_connection(self):
         for aggregatorId in self.aggregators:
-            logging.info('%%%%%%%%%% Opening grpc connection to aggregator ' + self.aggregators[aggregatorId].address + ' %%%%%%%%%%')
+            logging.info(f'%%%%%%%%%% AGGREGATOR {self.parent_rank} Opening grpc connection to aggregator {self.aggregators[aggregatorId].address} %%%%%%%%%%')
             channel = grpc.insecure_channel(
                 self.aggregators[aggregatorId].address,
                 options=[
@@ -114,7 +115,7 @@ class AggregatorConnections(object):
 
 
 
-class Aggregator(object):
+class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
     """This centralized aggregator collects training/testing feedbacks from executors"""
     def __init__(self, args):
         logging.info(f"Job args {args}")
@@ -174,6 +175,8 @@ class Aggregator(object):
         
         # ======== Task specific ============
         self.imdb = None           # object detection
+
+        super(Aggregator, self).__init__()
 
 
     def setup_env(self):
@@ -312,7 +315,7 @@ class Aggregator(object):
             logging.info("{} Info of all feasible clients {}".format(self.log_summary, self.client_manager.getDataInfo()))
 
             # start to sample clients
-            self.round_completion_handler()
+            # self.round_completion_handler() removing this and calling it after connection to aggregators is finished
 
 
     def tictak_client_tasks(self, sampled_clients, num_clients_to_collect):
@@ -449,6 +452,7 @@ class Aggregator(object):
             self.event_queue.append('stop')
 
         elif self.epoch % self.args.regional_interval == 0:
+            logging.info(f"AGGREGATOR {self.this_rank}: add HA to queue")
             self.event_queue.append('horizontal_update')
             if self.epoch % self.args.eval_interval == 0:
                 self.event_queue.append('update_model')
@@ -548,6 +552,7 @@ class Aggregator(object):
                 time.sleep(10)
 
         logging.info(f"{self.log_summary} Have opened connection to all aggregators")
+        self.round_completion_handler()
 
         while True:
             if len(self.event_queue) != 0:
@@ -586,18 +591,21 @@ class Aggregator(object):
                 elif event_msg == 'horizontal_update':
                     serialized_tensors = []
                     # TODO: do serialization in parallel
-                    path = os.path.join(logDir, f'GlobalModel_pre_ep{self.epoch}_Agg{self.this_rank}')
-                    torch.save(self.model, path)
 
                     for param in self.model.state_dict().values():
                         buffer = io.BytesIO()
                         torch.save(param.data.to(device='cpu'), buffer)
+                        logging.info(f"{self.log_summary} serializing params")
                         buffer.seek(0)
                         serialized_tensors.append(buffer.read())
 
+                    path = os.path.join(logDir, f'GlobalModel_pre_ep{self.epoch}_Agg{self.this_rank}')
+                    torch.save(self.model, path)
+
+                    HA_update_model_request = job_api_pb2.HA_UpdateModelRequest()
                     for aggregatorId in self.aggregators:
-                        self.aggregators.get_stub(aggregatorId).HA_UpdateModel(
-                            job_api_pb2.UpdateModelRequest(serialized_tensor=param)
+                        _ = self.aggregators.get_stub(aggregatorId).HA_UpdateModel(
+                            job_api_pb2.HA_UpdateModelRequest(serialized_tensor=param)
                                 for param in serialized_tensors)
 
                     while(len(self.HA_models) != len(self.aggregators)):
@@ -669,16 +677,21 @@ class Aggregator(object):
         return job_api_pb2.HA_UpdateModelResponse()
 
     def HA_update_model_handler(self, request_iterator):
-        model = self.init_model()
-        for param, request in zip(model.state_dict().values(), request_iterator):
+        tmpModel = self.init_model()
+        tmpModel = tmpModel.to(device=self.device)
+        for param, request in zip(tmpModel.state_dict().values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
+            logging.info(f'AGGREGATOR {self.this_rank}: Deserializing')
             buffer.seek(0)
             param.data = torch.load(buffer).to(device=self.device)
 
-        self.HA_models.append(model)
+        tmpModel = tmpModel.to(device=self.device)
+        logging.info(f'AGGREGATOR {self.this_rank}: After saving request into tmpModel, request_iterator still has {sum(1 for _ in request_iterator)} left')
+
         path = os.path.join(logDir, f'GlobalModel_recievedby_ep{self.epoch}_Agg{self.this_rank}')
-        torch.save(model, path)
-        """TODO dump model for manual verification"""
+        torch.save(tmpModel, path)      
+        
+        self.HA_models.append(tmpModel)
 
 
     def HA_aggregateModels(self):
