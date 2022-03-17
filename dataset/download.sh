@@ -78,7 +78,7 @@ cifar100()
     if [ ! -d "${DIR}/cifar100/client_data_mapping/" ]; 
     then
         echo "Downloading cifar100 dataset ..."   
-        wget -O ${DIR}/cifar100.tar.gz https://www.dropbox.com/s/oukzxrpk5n4a1qw/cifar100.tar.gz?dl=1  
+        wget -O ${DIR}/cifar100.tar.gz https://www.dropbox.com/s/oukzxrpk5n4a1qw/cifar100.tar.gz?dl=1 
         
         echo "Dataset downloaded, now decompressing..." 
         tar -xf ${DIR}/cifar100.tar.gz -C ${DIR}

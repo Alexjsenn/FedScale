@@ -13,7 +13,7 @@ args = parser.parse_args()
 print( "Print all? {}".format(args.a))
 if args.a == "False":
     var = input("Number of cifar100 logging folder: ")
-    pickle_file = open("/home/ubuntu/FedScale/core/evals/logs/cifar100/"+ var +"/aggregator/testing_perf", "rb")
+    pickle_file = open("/home/ubuntu/FedScale/core/evals/logs/cifar_testing_10_unique/"+ var +"/aggregator/testing_perf", "rb")
     objects = []
     while True:
         try:
@@ -49,11 +49,11 @@ if args.a == "False":
     
 else:
     #need a list of all folders in /home/ubuntu/FedScale/core/evals/logs/cifar100
-    cifar100_directory_contents = os.listdir("/home/ubuntu/FedScale/core/evals/logs/cifar100/")
+    cifar100_directory_contents = os.listdir("/home/ubuntu/FedScale/core/evals/logs/cifar_testing_10_unique/")
     #print(cifar100_directory_contents)
     for experiment in cifar100_directory_contents:
         print("Experiment folder : {}".format(experiment))
-        pickle_file = open("/home/ubuntu/FedScale/core/evals/logs/cifar100/"+ experiment +"/aggregator/testing_perf", "rb")
+        pickle_file = open("/home/ubuntu/FedScale/core/evals/logs/cifar_testing_10_unique/"+ experiment +"/aggregator/testing_perf", "rb")
         objects = []
         while True:
             try:

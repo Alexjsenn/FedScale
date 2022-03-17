@@ -26,10 +26,12 @@ if [[ ${args[--core]} == 'true' ]]; then
     done
 elif [[ ${args[--data]} == 'true' ]]; then
     for ii in `seq $MIN $MAX`; do
-        AGENT="agent${ii}"
+        AGENT="10.30.74.${ii}"
         echo "Copying data to 10.30.74.$ii ..."
-        (rsync -ar \
-            --delete --info=progress2 ~/FedScale/dataset/data/FEMNIST ${AGENT}:~/FedScale/dataset/data/ &)
+
+        (rsync -e "ssh -oStrictHostKeyChecking=no" -ar \
+            --delete --info=progress2 ~/FedScale/dataset/data/cifar100 ${AGENT}:~/FedScale/dataset/data/ &)
+
     done
 fi
 

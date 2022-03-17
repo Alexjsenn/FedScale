@@ -56,11 +56,7 @@ setup_commands:
 job_conf: 
     - job_name: femnist                   # Generate logs under this folder: log_path/job_name/time_stamp
     - log_path: /home/ubuntu/FedScale/core/evals # Path of log files
-<<<<<<< HEAD
-    - total_worker: 1                    # Number of participants per round, we use K=100 in our paper, large K will be much slower
-=======
     - total_worker: 100  #58 for 2 epochs                  # Number of participants per round, we use K=100 in our paper, large K will be much slower
->>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
     - data_set: femnist                   # Dataset: openImg, google_speech, stackoverflow
     - data_dir: /home/ubuntu/FedScale/dataset/data/femnist    # Path of the dataset
     - data_map_file: /home/ubuntu/FedScale/dataset/data/femnist/client_data_mapping/train.csv              # Allocation of data to each client, turn to iid setting if not provided
@@ -68,11 +64,7 @@ job_conf:
     # - device_avail_file: /home/ubuntu/FedScale/dataset/data/device_info/client_behave_trace
     - model: customFemnist                            # Models: e.g., shufflenet_v2_x2_0, mobilenet_v2, resnet34, albert-base-v2
     - gradient_policy: yogi                 # {"fed-yogi", "fed-prox", "fed-avg"}, "fed-avg" by default
-<<<<<<< HEAD
-    - eval_interval: 30                     # How many rounds to run a testing on the testing set
-=======
     - eval_interval: 10                     # How many rounds to run a testing on the testing set
->>>>>>> b9764ea74febe502ef5e1ba1419a4398add3dae4
     - epochs: 2                          # Number of rounds to run this training. We use 1000 in our paper, while it may converge w/ ~400 rounds
     - filter_less: 21                       # Remove clients w/ less than 21 samples
     - num_loaders: 2
