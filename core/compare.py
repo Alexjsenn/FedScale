@@ -25,7 +25,9 @@ def validate_state_dicts(model_state_dict_1, model_state_dict_2):
       v_2 = v_2.to("cuda:0" if torch.cuda.is_available() else "cpu")
     if not torch.allclose(v_1, v_2):
       print(f"Tensor mismatch: {v_1} vs {v_2}")
-      return False
+      #return False
+    #print(f"Tensors: {v_1} vs {v_2}")
+    
 
 
 def check(model1, model2):
@@ -48,8 +50,8 @@ def compare_models(model_1, model_2):
     if models_differ == 0:
         print('Models match perfectly! :)')
 
-model1 = torch.load("evals/logs/femnist/0309_141354/aggregator/GlobalModel_post_Agg1")
-model2 = torch.load("evals/logs/femnist/0309_141354/aggregator/GlobalModel_post_Agg2")
+model1 = torch.load("evals/logs/femnist/0316_134349/aggregator/GlobalModel_post_ep30_Agg2")
+model2 = torch.load("evals/logs/femnist/0316_134349/aggregator/GlobalModel_post_ep30_Agg3")
 
-#validate_state_dicts(model1.state_dict(), model2.state_dict())
+validate_state_dicts(model1.state_dict(), model2.state_dict())
 compare_models(model1, model2)

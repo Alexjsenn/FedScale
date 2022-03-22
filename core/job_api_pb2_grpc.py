@@ -209,7 +209,7 @@ class HA_JobServiceStub(object):
         """
         self.HA_UpdateModel = channel.stream_unary(
                 '/fedscale.HA_JobService/HA_UpdateModel',
-                request_serializer=job__api__pb2.UpdateModelRequest.SerializeToString,
+                request_serializer=job__api__pb2.HA_UpdateModelRequest.SerializeToString,
                 response_deserializer=job__api__pb2.HA_UpdateModelResponse.FromString,
                 )
 
@@ -228,7 +228,7 @@ def add_HA_JobServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'HA_UpdateModel': grpc.stream_unary_rpc_method_handler(
                     servicer.HA_UpdateModel,
-                    request_deserializer=job__api__pb2.UpdateModelRequest.FromString,
+                    request_deserializer=job__api__pb2.HA_UpdateModelRequest.FromString,
                     response_serializer=job__api__pb2.HA_UpdateModelResponse.SerializeToString,
             ),
     }
@@ -253,7 +253,7 @@ class HA_JobService(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.stream_unary(request_iterator, target, '/fedscale.HA_JobService/HA_UpdateModel',
-            job__api__pb2.UpdateModelRequest.SerializeToString,
+            job__api__pb2.HA_UpdateModelRequest.SerializeToString,
             job__api__pb2.HA_UpdateModelResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

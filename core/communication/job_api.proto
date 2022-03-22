@@ -15,7 +15,7 @@ service JobService {
 }
 
 service HA_JobService{
-    rpc HA_UpdateModel (stream UpdateModelRequest) returns (HA_UpdateModelResponse) {}
+    rpc HA_UpdateModel (stream HA_UpdateModelRequest) returns (HA_UpdateModelResponse) {}
 }
 
 message UpdateModelRequest {
@@ -24,6 +24,10 @@ message UpdateModelRequest {
 
 message UpdateModelResponse {
     string message = 1;
+}
+
+message HA_UpdateModelRequest {
+    bytes serialized_tensor = 1;  // TODO: Change it to TensorProto
 }
 
 message HA_UpdateModelResponse {}

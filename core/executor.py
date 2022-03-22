@@ -222,10 +222,13 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
 
     def update_model_handler(self, request_iterator):
         """Update the model copy on this executor"""
-        for param, request in zip(self.model.state_dict().values(), request_iterator):
+        sd = self.model.state_dict()
+        for param, request in zip(sd.values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
             buffer.seek(0)
             param.data = torch.load(buffer).to(device=self.device)
+        
+        self.model.load_state_dict(sd)
 
         self.epoch += 1
         if self.epoch % self.args.dump_epoch == 0 and self.this_rank == 1:

@@ -10,7 +10,9 @@ import job_api_pb2
 import io
 import torch
 import pickle
+import time
 from math import floor
+from eventLogger import EventLogger
 
 
 MAX_MESSAGE_LENGTH = 50000000
@@ -114,7 +116,6 @@ class AggregatorConnections(object):
         return self.aggregators[aggregatorId].stub
 
 
-
 class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
     """This centralized aggregator collects training/testing feedbacks from executors"""
     def __init__(self, args):
@@ -137,6 +138,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         # ======== model and data ========
         self.model = None
         self.HA_models = []
+        self.HA_models_recieved = 0
 
         # list of parameters in model.parameters()
         self.model_in_update = []
@@ -166,6 +168,8 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.stats_util_accumulator = []
         self.loss_accumulator = []
         self.client_training_results = []
+
+        self.eventLogger = EventLogger()
 
         # number of registered executors
         self.registered_executor_info = set()
@@ -352,8 +356,11 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
 
     def run(self):
+        self.eventLogger.log("start_aggregator")
         self.setup_env()
         self.model = self.init_model()
+        for i in range(len(self.aggregators)):
+            self.HA_models.append(init_model())
         self.save_last_param()
 
         self.model_update_size = sys.getsizeof(pickle.dumps(self.model))/1024.0*8. # kbits
@@ -390,15 +397,16 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         # Start to take the average of updates, and we do not keep updates to save memory
         # Importance of each update is 1/#_of_participants
         importance = 1./self.tasks_round
+        sd = self.model.state_dict()
         if len(self.model_in_update) == 0:
             self.model_in_update = [True]
 
-            for idx, param in enumerate(self.model.state_dict().values()):
+            for idx, param in enumerate(sd.values()):
                 param.data = (torch.from_numpy(results['update_weight'][idx]).to(device=device)*importance).to(dtype=param.data.dtype)
         else: 
-            for idx, param in enumerate(self.model.state_dict().values()):
+            for idx, param in enumerate(sd.values()):
                 param.data +=(torch.from_numpy(results['update_weight'][idx]).to(device=device)*importance).to(dtype=param.data.dtype)
-
+        self.model.load_state_dict(sd)
 
     def save_last_param(self):
         self.last_global_model = [param.data.clone() for param in self.model.parameters()]
@@ -410,6 +418,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
     def round_completion_handler(self):
         self.global_virtual_clock += self.round_duration
         self.epoch += 1
+        self.eventLogger.log("end_round")
 
         if self.epoch % self.args.decay_epoch == 0:
             self.args.learning_rate = max(self.args.learning_rate*self.args.decay_factor, self.args.min_learning_rate)
@@ -555,11 +564,13 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.round_completion_handler()
 
         while True:
+            self.eventLogger.log("start_eventmonitor")
             if len(self.event_queue) != 0:
                 event_msg = self.event_queue.popleft()
                 send_msg = {'event': event_msg}
 
                 if event_msg == 'update_model':
+                    self.eventLogger.log("start_round")
                     serialized_tensors = []
                     # TODO: do serialization in parallel
                     for param in self.model.state_dict().values():
@@ -589,30 +600,31 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                                     serialized_train_config=pickle.dumps(config)))
 
                 elif event_msg == 'horizontal_update':
+                    self.eventLogger.log("start_HAround")
                     serialized_tensors = []
                     # TODO: do serialization in parallel
 
                     for param in self.model.state_dict().values():
+                        #logging.info(f"{self.log_summary} serializing params {param.data}")
                         buffer = io.BytesIO()
                         torch.save(param.data.to(device='cpu'), buffer)
-                        logging.info(f"{self.log_summary} serializing params")
                         buffer.seek(0)
                         serialized_tensors.append(buffer.read())
 
                     path = os.path.join(logDir, f'GlobalModel_pre_ep{self.epoch}_Agg{self.this_rank}')
-                    torch.save(self.model, path)
+                    #torch.save(self.model, path)
 
-                    HA_update_model_request = job_api_pb2.HA_UpdateModelRequest()
                     for aggregatorId in self.aggregators:
                         _ = self.aggregators.get_stub(aggregatorId).HA_UpdateModel(
                             job_api_pb2.HA_UpdateModelRequest(serialized_tensor=param)
                                 for param in serialized_tensors)
 
-                    while(len(self.HA_models) != len(self.aggregators)):
+                    while(self.HA_models_recieved != len(self.aggregators)):
                         time.sleep(0.1)
 
                     self.HA_aggregateModels()
-                    self.HA_models = []
+                    self.HA_models_recieved = 0
+                    self.eventLogger.log("end_HAround")
 
                 elif event_msg == 'stop':
                     for executorId in self.executors:
@@ -622,9 +634,11 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     break
 
                 elif event_msg == 'test':
+                    self.eventLogger.log("start_test")
                     for executorId in self.executors:
                         response = self.executors.get_stub(executorId).Test(job_api_pb2.TestRequest())
                         self.testing_completion_handler(pickle.loads(response.serialized_test_response))
+                    self.eventLogger.log("end_test")
 
             elif not self.client_event_queue.empty():
 
@@ -661,6 +675,9 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.executors.close_grpc_connection()
         self.aggregators.close_grpc_connection()
         self.grpc_server.stop(0)
+        self.eventLogger.log("shutdown_aggregator")
+        with open(os.path.join(logDir, f'eventLoggerAgg{self.this_rank}'), 'wb') as fout:
+            pickle.dump(self.eventLogger.events, fout)
 
 
     def stop(self):
@@ -677,39 +694,51 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         return job_api_pb2.HA_UpdateModelResponse()
 
     def HA_update_model_handler(self, request_iterator):
-        tmpModel = self.init_model()
-        tmpModel = tmpModel.to(device=self.device)
-        for param, request in zip(tmpModel.state_dict().values(), request_iterator):
+        self.HA_models[self.HA_models_recieved].to(device=self.device)
+        sd = self.HA_models[self.HA_models_recieved].state_dict()
+        for param, request in zip(sd.values(), request_iterator):
             buffer = io.BytesIO(request.serialized_tensor)
-            logging.info(f'AGGREGATOR {self.this_rank}: Deserializing')
             buffer.seek(0)
             param.data = torch.load(buffer).to(device=self.device)
 
-        tmpModel = tmpModel.to(device=self.device)
-        logging.info(f'AGGREGATOR {self.this_rank}: After saving request into tmpModel, request_iterator still has {sum(1 for _ in request_iterator)} left')
+        self.HA_models[self.HA_models_recieved].load_state_dict(sd)
 
         path = os.path.join(logDir, f'GlobalModel_recievedby_ep{self.epoch}_Agg{self.this_rank}')
-        torch.save(tmpModel, path)      
+        #torch.save(self.HA_models[self.HA_models_recieved], path) 
+
+        self.HA_models_recieved += 1     
+
+        #for param in tmpModel.state_dict().values():    
+        #    logging.info(f'AGGREGATOR {self.this_rank}: Deserializing {param.data}')
         
-        self.HA_models.append(tmpModel)
+        #self.HA_models.append(tmpModel)
 
 
     def HA_aggregateModels(self):
         device = self.device
+        self.eventLogger.log("start_HAaggregateProcess")
 
         """Using FEDAVG as performed above in client_completion_handler()"""
         importance = 1./(len(self.aggregators)+1)
 
-        for idx, param in enumerate(self.model.state_dict().values()):
-            param.data = (param.data*importance).to(dtype=param.data.dtype)
 
+        sd = self.model.state_dict()
+        for param, update in zip(sd.values(), self.model.state_dict().values()):
+            param.data = (update.data*importance).to(dtype=param.data.dtype)
+
+        i = 0
         for model in self.HA_models:
-            for param, update in zip(self.model.state_dict().values(), model.state_dict().values()):
+            path = os.path.join(logDir, f'GlobalModel_HAmodel{i}_ep{self.epoch}_Agg{self.this_rank}')
+            i+=1
+            #torch.save(model, path)
+            for param, update in zip(sd.values(), model.state_dict().values()):
                 param.data += (update.to(device=device)*importance).to(dtype=param.data.dtype)
 
+        self.model.load_state_dict(sd)
         # Dump the result for manual verification
         path = os.path.join(logDir, f'GlobalModel_post_ep{self.epoch}_Agg{self.this_rank}')
-        torch.save(self.model, path)
+        #torch.save(self.model, path)
+        self.eventLogger.log("end_HAaggregateProcess")
 
 
 if __name__ == "__main__":
