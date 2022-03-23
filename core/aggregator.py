@@ -581,6 +581,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.round_completion_handler()
 
         while True:
+            import threading
             self.eventLogger.log("start_eventmonitor")
             if len(self.event_queue) != 0:
                 event_msg = self.event_queue.popleft()
@@ -589,6 +590,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                 if event_msg == 'update_model':
                     self.eventLogger.log("start_round")
                     serialized_tensors = []
+                    threads = []
                     # TODO: do serialization in parallel
                     for param in self.model.state_dict().values():
                         buffer = io.BytesIO()
@@ -597,12 +599,31 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                         serialized_tensors.append(buffer.read())
 
                     update_model_request = job_api_pb2.UpdateModelRequest()
-                    for executorId in self.executors:
+
+                    def executorUpdateRequest_delayed(executorId):
+                        time.sleep(self.args.local_delay)
                         _ = self.executors.get_stub(executorId).UpdateModel(
                             job_api_pb2.UpdateModelRequest(serialized_tensor=param)
                                 for param in serialized_tensors)
 
+                    for executorId in self.executors:
+                        thread = threading.Thread(target=executorUpdateRequest_delayed, args=[executorId])
+                        thread.start()
+                        threads.append(thread)
+
+                    for thread in threads:
+                        thread.join()
+
                 elif event_msg == 'start_round':
+                    threads = []
+
+                    def executorTrainRequest_delayed(executorId, clientId, config):
+                        time.sleep(self.args.local_delay)
+                        _ = self.executors.get_stub(executorId).Train(
+                                job_api_pb2.TrainRequest(
+                                    client_id=clientId,
+                                    serialized_train_config=pickle.dumps(config)))
+
                     for executorId in self.executors:
                         next_clientId = self.resource_manager.get_next_task()
 
@@ -611,14 +632,17 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                             config = self.get_client_conf(next_clientId)
                             self.server_event_queue[executorId].put({'event': 'train', 'clientId':next_clientId, 'conf': config})
 
-                            _ = self.executors.get_stub(executorId).Train(
-                                job_api_pb2.TrainRequest(
-                                    client_id=next_clientId,
-                                    serialized_train_config=pickle.dumps(config)))
+                            thread = threading.Thread(target=executorTrainRequest_delayed, args=[executorId, next_clientId, config])
+                            thread.start()
+                            threads.append(thread)
+
+                    for thread in threads:
+                        thread.join()
 
                 elif event_msg == 'horizontal_update':
                     self.eventLogger.log("start_HAround")
                     serialized_tensors = []
+                    threads = []
                     # TODO: do serialization in parallel
 
                     for param in self.model.state_dict().values():
@@ -631,16 +655,26 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     path = os.path.join(logDir, f'GlobalModel_pre_ep{self.epoch}_Agg{self.this_rank}')
                     #torch.save(self.model, path)
 
-                    for aggregatorId in self.aggregators:
+                    def aggregatorUpdateRequest_delayed(aggregatorId):
+                        time.sleep(self.args.backbone_delay)
                         _ = self.aggregators.get_stub(aggregatorId).HA_UpdateModel(
                             job_api_pb2.HA_UpdateModelRequest(serialized_tensor=param)
                                 for param in serialized_tensors)
+
+                    for aggregatorId in self.aggregators:
+                        thread = threading.Thread(target=aggregatorUpdateRequest_delayed, args=[aggregatorId])
+                        thread.start()
+                        threads.append(thread)
 
                     while(self.HA_models_recieved != len(self.aggregators)):
                         time.sleep(0.1)
 
                     self.HA_aggregateModels()
                     self.HA_models_recieved = 0
+
+                    for thread in threads:
+                        thread.join()
+                        
                     self.eventLogger.log("end_HAround")
 
                 elif event_msg == 'stop':
@@ -652,9 +686,20 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
                 elif event_msg == 'test':
                     self.eventLogger.log("start_test")
-                    for executorId in self.executors:
+                    threads = []
+                    def executorTestRequest_delayed(executorId):
+                        time.sleep(self.args.local_delay)
                         response = self.executors.get_stub(executorId).Test(job_api_pb2.TestRequest())
                         self.testing_completion_handler(pickle.loads(response.serialized_test_response))
+
+                    for executorId in self.executors:
+                        thread = threading.Thread(target=executorTestRequest_delayed, args=[executorId])
+                        thread.start()
+                        threads.append(thread)
+
+                    for thread in threads:
+                        thread.join()
+
                     self.eventLogger.log("end_test")
 
             elif not self.client_event_queue.empty():
@@ -708,6 +753,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         """
         logging.info(f'AGGREGATOR {self.this_rank}: Recieved GRPC HA_UpdateModel request')
         self.HA_update_model_handler(request_iterator)
+        time.sleep(self.args.backbone_delay)
         return job_api_pb2.HA_UpdateModelResponse()
 
     def HA_update_model_handler(self, request_iterator):

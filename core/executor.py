@@ -51,6 +51,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         """
         logging.info('Received GRPC UpdateModel request')
         self.update_model_handler(request_iterator)
+        time.sleep(self.args.local_delay)
         return job_api_pb2.UpdateModelResponse()
 
 
@@ -58,6 +59,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         """A GRPC function for JobService invoked by Train request.
         """
         logging.info('Received GRPC Train request')
+        time.sleep(self.args.local_delay)
         return job_api_pb2.TrainResponse()
 
 
@@ -77,6 +79,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         logging.info('Received GRPC ReportExecutorInfo request')
         response = job_api_pb2.ReportExecutorInfoResponse()
         response.training_set_size.extend(self.training_sets.getSize()['size'])
+        time.sleep(self.args.local_delay)
         return response
 
 
@@ -85,6 +88,7 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
         """
         logging.info('Received GRPC Test request')
         test_res = self.testing_handler(args=self.args)
+        time.sleep(self.args.local_delay)
         return job_api_pb2.TestResponse(serialized_test_response=pickle.dumps(test_res))
 
 
