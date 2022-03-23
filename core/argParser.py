@@ -28,6 +28,8 @@ parser.add_argument('--exploration_decay', type=float, default=0.98)
 parser.add_argument('--sample_window', type=float, default=5.0)
 parser.add_argument('--device_avail_file', type=str, default=None)
 parser.add_argument('--clock_factor', type=float, default=1.0, help="Refactor the clock time given the profile")
+parser.add_argument('--backbone_delay', type=float, default=0.0)
+parser.add_argument('--local_delay', type=float, default=0.0)
 
 
 # The configuration of model and dataset
