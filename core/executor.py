@@ -334,17 +334,28 @@ class Executor(job_api_pb2_grpc.JobServiceServicer):
                 # initiate each training round
                 if event_msg == 'train':
                     clientId, client_conf = event_dict['clientId'], self.override_conf(event_dict['conf'])
-
                     train_res = self.training_handler(clientId=clientId, conf=client_conf)
-                    self.push_msg_to_server('train_nowait', None)
-                    # model updates may be time-consuming, thus we apply asyn push for better communication-computation overlaps
-                    self.push_msg_to_server_asyn(event_msg, train_res)
+
+                    def push():
+                        self.push_msg_to_server('train_nowait', None)
+                        # model updates may be time-consuming, thus we apply asyn push for better communication-computation overlaps
+                        self.push_msg_to_server_asyn(event_msg, train_res)
+
+                    def push_with_delay():
+                        time.sleep(self.args.local_delay)
+                        push()
+
+                    if (self.args.local_delay == 0.0):
+                        push()
+                    else:
+                        import threading
+                        push_thread = threading.Thread(target=push_with_delay, args=[])
+                        push_thread.start()
 
                 else:
                     logging.error("Unknown message types!")
 
             time.sleep(0.3)
-
 
     def stop(self):
         logging.info(f"Terminating (Executor {self.this_rank}) ...")
