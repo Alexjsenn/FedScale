@@ -13,6 +13,8 @@ import pickle
 import time
 from math import floor
 from eventLogger import EventLogger
+import neptune.new as neptune
+import psutil
 
 
 MAX_MESSAGE_LENGTH = 50000000
@@ -177,6 +179,16 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.testing_history = {'data_set': args.data_set, 'model': args.model, 'sample_mode': args.sample_mode,
                         'gradient_policy': args.gradient_policy, 'task': args.task, 'perf': collections.OrderedDict()}
         
+
+        # neptune logging
+        self.Neptune = neptune.init(
+            project="alexjsenn/HFL-Fedscale",
+            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJjZDUzNjRjZS1lYTVlLTQwODMtOWU0NS1jYmYyOGYzYTQ0MzUifQ==",  
+        )
+        self.Neptune["model/parameters"] = args
+
+
+
         # ======== Task specific ============
         self.imdb = None           # object detection
 
@@ -438,9 +450,12 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         logging.info(f"{self.log_summary} Wall clock: {round(self.global_virtual_clock)} s, Epoch: {self.epoch}, Planned participants: " + \
             f"{len(self.sampled_participants)}, Succeed participants: {len(self.stats_util_accumulator)}, Training loss: {avg_loss}")
 
+        self.Neptune["train/epoch/loss"].log(avg_loss)
+
+
         # update select participants
-        self.sampled_participants = self.select_participants(select_num_participants=self.args.total_worker, overcommitment=self.args.overcommitment)
-        clientsToRun, round_stragglers, virtual_client_clock, round_duration = self.tictak_client_tasks(self.sampled_participants, self.args.total_worker)
+        self.sampled_participants = self.select_participants(select_num_participants=len(self.executors), overcommitment=self.args.overcommitment)
+        clientsToRun, round_stragglers, virtual_client_clock, round_duration = self.tictak_client_tasks(self.sampled_participants, len(self.executors))
 
         logging.info(f"{self.log_summary} Selected participants to run: {clientsToRun}:\n{virtual_client_clock}")
 
@@ -515,6 +530,8 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     .format( self.log_summary, self.epoch, self.global_virtual_clock, self.testing_history['perf'][self.epoch]['top_1'],
                     self.testing_history['perf'][self.epoch]['top_5'], self.testing_history['perf'][self.epoch]['loss'],
                     self.testing_history['perf'][self.epoch]['test_len']))
+
+            self.Neptune["train/epoch/accuracy"].log(self.testing_history['perf'][self.epoch]['top_1'])
 
             # Dump the testing result
             with open(os.path.join(logDir, 'testing_perf'), 'wb') as fout:

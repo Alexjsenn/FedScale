@@ -45,15 +45,15 @@ job_conf:
     # - device_conf_file: /home/ubuntu/FedScale/dataset/data/device_info/client_device_capacity     # Path of the client trace
     # - device_avail_file: /home/ubuntu/FedScale/dataset/data/device_info/client_behave_trace
     - model: customFemnist                            # Models: e.g., shufflenet_v2_x2_0, mobilenet_v2, resnet34, albert-base-v2
-    - gradient_policy: yogi                 # {"fed-yogi", "fed-prox", "fed-avg"}, "fed-avg" by default
-    - eval_interval: 1
-    - regional_interval: 1
-    - epochs: 2                      # Number of rounds to run this training. We use 1000 in our paper, while it may converge w/ ~400 rounds
+    - gradient_policy: fed-avg                 # {"fed-yogi", "fed-prox", "fed-avg"}, "fed-avg" by default
+    - eval_interval: 5
+    - regional_interval: 20
+    - epochs: 102                      # Number of rounds to run this training. We use 1000 in our paper, while it may converge w/ ~400 rounds
     - filter_less: 21                       # Remove clients w/ less than 21 samples
     - num_loaders: 2
     - yogi_eta: 3e-3 
     - yogi_tau: 1e-8
-    - local_steps: 1
+    - local_steps: 20
     - learning_rate: 0.05
     - batch_size: 20
     - test_bsz: 20
