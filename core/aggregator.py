@@ -187,6 +187,10 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         )
         self.Neptune["model/parameters"] = args
 
+        # Network traffic variables
+        self.backgroundSent = 0
+        self.backgroundRecieved = 0
+
 
 
         # ======== Task specific ============
@@ -369,6 +373,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
     def run(self):
         self.eventLogger.log("start_aggregator")
+        self.network_traffic()
         self.setup_env()
         self.model = self.init_model()
         for i in range(len(self.aggregators)):
@@ -641,6 +646,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
                 elif event_msg == 'horizontal_update':
                     self.eventLogger.log("start_HAround")
+                    HAstartTime = time.time()
                     serialized_tensors = []
                     threads = []
                     # TODO: do serialization in parallel
@@ -661,10 +667,24 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                             job_api_pb2.HA_UpdateModelRequest(serialized_tensor=param)
                                 for param in serialized_tensors)
 
+                    timeStart = time.time()
+                    netStart = psutil.net_io_counters(pernic=True).get("eth0")
+
                     for aggregatorId in self.aggregators:
                         thread = threading.Thread(target=aggregatorUpdateRequest_delayed, args=[aggregatorId])
                         thread.start()
                         threads.append(thread)
+
+                    for thread in threads:
+                        thread.join()
+                    
+                    timeEnd = time.time()
+                    netEnd = psutil.net_io_counters(pernic=True).get("eth0")
+
+                    sentKbs = (netEnd[0] - netStart[0])/1024 - ((timeEnd-timeStart)*self.backgroundSent)
+                    self.Neptune["HA/epoch/sentMb"].log(sentKbs/1024)
+                    logging.info(f"{self.log_summary} Round {self.epoch}: horizontal aggregation sent {sentKbs}kb")
+                    
 
                     while(self.HA_models_recieved != len(self.aggregators)):
                         time.sleep(0.1)
@@ -672,8 +692,10 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     self.HA_aggregateModels()
                     self.HA_models_recieved = 0
 
-                    for thread in threads:
-                        thread.join()
+                    HAendTime = time.time()
+                    self.Neptune["HA/epoch/aggrTime"].log(HAendTime-HAstartTime)
+
+                    
                         
                     self.eventLogger.log("end_HAround")
 
@@ -803,6 +825,21 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         #torch.save(self.model, path)
         self.eventLogger.log("end_HAaggregateProcess")
 
+    def network_traffic(self):
+        totSent = 0
+        totRecieved = 0
+        for i in range(5):
+            before = psutil.net_io_counters(pernic=True).get("eth0")
+            time.sleep(1)
+            after = psutil.net_io_counters(pernic=True).get("eth0")
+            totSent += (after[0] - before[0])/1024
+            totRecieved += (after[1] - before[1])/1024
+            time.sleep(1)
+
+        self.backgroundSent = (totSent)/5 
+        self.backgroundRecieved = (totRecieved)/5 
+        logging.info(f"{self.log_summary} background network traffic is about {self.backgroundSent}kbps sent and {self.backgroundRecieved}kbps recieved")
+        
 
 if __name__ == "__main__":
     aggregator = Aggregator(args)
