@@ -12,7 +12,7 @@ import torch
 import pickle
 import time
 from math import floor
-from eventLogger import EventLogger
+from eventLogger import EventLogger, EventType
 import neptune.new as neptune
 import psutil
 
@@ -260,7 +260,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         port = '[::]:{}'.format(56000 + self.this_rank)
         self.grpc_server.add_insecure_port(port)
         self.grpc_server.start()
-        logging.info(f'AGGREGATOR {self.this_rank}: Started GRPC server at {port}')
+        logging.info(f'{self.log_summary} Started GRPC server at {port}')
 
 
     def init_data_communication(self):
@@ -372,7 +372,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
 
     def run(self):
-        self.eventLogger.log("start_aggregator")
+        self.eventLogger.log(EventType.start_aggregator)
         self.network_traffic()
         self.setup_env()
         self.model = self.init_model()
@@ -435,7 +435,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
     def round_completion_handler(self):
         self.global_virtual_clock += self.round_duration
         self.epoch += 1
-        self.eventLogger.log("end_round")
+        self.eventLogger.log(EventType.end_round)
 
         if self.epoch % self.args.decay_epoch == 0:
             self.args.learning_rate = max(self.args.learning_rate*self.args.decay_factor, self.args.min_learning_rate)
@@ -481,7 +481,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
             self.event_queue.append('stop')
 
         elif self.epoch % self.args.regional_interval == 0:
-            logging.info(f"AGGREGATOR {self.this_rank}: add HA to queue")
+            logging.info(f"{self.log_summary} add HA to queue")
             self.event_queue.append('horizontal_update')
             if self.epoch % self.args.eval_interval == 0:
                 self.event_queue.append('update_model')
@@ -551,7 +551,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         return conf
 
     def event_monitor(self):
-        logging.info(f"AGGREGATOR {self.this_rank}: Start monitoring events ...")
+        logging.info(f"{self.log_summary} Start monitoring events ...")
         start_time = time.time()
         time.sleep(20)
 
@@ -587,13 +587,13 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
         while True:
             import threading
-            self.eventLogger.log("start_eventmonitor")
+            self.eventLogger.log(EventType.start_eventmonitor)
             if len(self.event_queue) != 0:
                 event_msg = self.event_queue.popleft()
                 send_msg = {'event': event_msg}
 
                 if event_msg == 'update_model':
-                    self.eventLogger.log("start_round")
+                    self.eventLogger.log(EventType.start_round)
                     serialized_tensors = []
                     threads = []
                     # TODO: do serialization in parallel
@@ -645,7 +645,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                         thread.join()
 
                 elif event_msg == 'horizontal_update':
-                    self.eventLogger.log("start_HAround")
+                    self.eventLogger.log(EventType.start_HAround)
                     HAstartTime = time.time()
                     serialized_tensors = []
                     threads = []
@@ -697,7 +697,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
 
                     
                         
-                    self.eventLogger.log("end_HAround")
+                    self.eventLogger.log(EventType.end_HAround)
 
                 elif event_msg == 'stop':
                     for executorId in self.executors:
@@ -707,7 +707,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     break
 
                 elif event_msg == 'test':
-                    self.eventLogger.log("start_test")
+                    self.eventLogger.log(EventType.start_test)
                     threads = []
                     def executorTestRequest_delayed(executorId):
                         time.sleep(self.args.local_delay)
@@ -722,7 +722,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
                     for thread in threads:
                         thread.join()
 
-                    self.eventLogger.log("end_test")
+                    self.eventLogger.log(EventType.end_test)
 
             elif not self.client_event_queue.empty():
 
@@ -759,7 +759,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.executors.close_grpc_connection()
         self.aggregators.close_grpc_connection()
         self.grpc_server.stop(0)
-        self.eventLogger.log("shutdown_aggregator")
+        self.eventLogger.log(EventType.shutdown_aggregator)
         with open(os.path.join(logDir, f'eventLoggerAgg{self.this_rank}'), 'wb') as fout:
             pickle.dump(self.eventLogger.events, fout)
 
@@ -773,7 +773,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
     def HA_UpdateModel(self, request_iterator, context):
         """A GRPC function for JobService invoked by HA_UpdateModel request
         """
-        logging.info(f'AGGREGATOR {self.this_rank}: Recieved GRPC HA_UpdateModel request')
+        logging.info(f'{self.log_summary} Recieved GRPC HA_UpdateModel request')
         self.HA_update_model_handler(request_iterator)
         time.sleep(self.args.backbone_delay)
         return job_api_pb2.HA_UpdateModelResponse()
@@ -794,14 +794,14 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         self.HA_models_recieved += 1     
 
         #for param in tmpModel.state_dict().values():    
-        #    logging.info(f'AGGREGATOR {self.this_rank}: Deserializing {param.data}')
+        #    logging.info(f' eTOR {self.this_rank}: Deserializing {param.data}')
         
         #self.HA_models.append(tmpModel)
 
 
     def HA_aggregateModels(self):
         device = self.device
-        self.eventLogger.log("start_HAaggregateProcess")
+        self.eventLogger.log(EventType.start_HAaggregateProcess)
 
         """Using FEDAVG as performed above in client_completion_handler()"""
         importance = 1./(len(self.aggregators)+1)
@@ -823,7 +823,7 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         # Dump the result for manual verification
         path = os.path.join(logDir, f'GlobalModel_post_ep{self.epoch}_Agg{self.this_rank}')
         #torch.save(self.model, path)
-        self.eventLogger.log("end_HAaggregateProcess")
+        self.eventLogger.log(EventType.end_HAaggregateProcess)
 
     def network_traffic(self):
         totSent = 0
