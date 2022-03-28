@@ -414,16 +414,14 @@ class Aggregator(job_api_pb2_grpc.HA_JobServiceServicer):
         # Start to take the average of updates, and we do not keep updates to save memory
         # Importance of each update is 1/#_of_participants
         importance = 1./self.tasks_round
-        sd = self.model.state_dict()
         if len(self.model_in_update) == 0:
             self.model_in_update = [True]
 
-            for idx, param in enumerate(sd.values()):
+            for idx, param in enumerate(self.model.state_dict().values()):
                 param.data = (torch.from_numpy(results['update_weight'][idx]).to(device=device)*importance).to(dtype=param.data.dtype)
         else: 
-            for idx, param in enumerate(sd.values()):
+            for idx, param in enumerate(self.model.state_dict().values()):
                 param.data +=(torch.from_numpy(results['update_weight'][idx]).to(device=device)*importance).to(dtype=param.data.dtype)
-        self.model.load_state_dict(sd)
 
     def save_last_param(self):
         self.last_global_model = [param.data.clone() for param in self.model.parameters()]
