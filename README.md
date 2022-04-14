@@ -1,3 +1,16 @@
+# Hierarchical and Scalable Location Based Federated Learning For IOT
+
+Capstone Project. University of Toronto
+
+Alexander Senn, Gabrielle Madden, Marcos David Madrigal Albores, Kieun Park
+
+This repository is a fork of FedScale, which we took as a base to further develop our system.
+
+Details can be found in our presentation.
+
+<img src=capstone/presentation.png>
+
+
 
 ## FedScale: Benchmarking Model and System Performance of Federated Learning ([Paper](https://arxiv.org/abs/2105.11367))
 
